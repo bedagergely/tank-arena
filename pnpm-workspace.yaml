@@ -1,0 +1,19 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# Supply-chain guard: only resolve package versions published at least 7 days ago.
+minimumReleaseAge: 10080
+
+# Only these packages may run install scripts.
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: false
+
+# `colyseus` lists its optional uWebSockets transport as a peer; it depends on a
+# git-hosted package, which we do not want. We use the default `ws` transport.
+overrides:
+  "@colyseus/uwebsockets-transport": "-"
+peerDependencyRules:
+  ignoreMissing:
+    - "@colyseus/uwebsockets-transport"

@@ -1,0 +1,38 @@
+{
+  "name": "@tank-arena/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative Colyseus game server",
+  "type": "module",
+  "main": "build/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node build/index.js",
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^5.0.20",
+    "@colyseus/tools": "^0.18.2",
+    "@tank-arena/shared": "workspace:*",
+    "colyseus": "^0.18.4",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@colyseus/sdk": "^0.18.1",
+    "@colyseus/testing": "^0.18.4",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  }
+}
