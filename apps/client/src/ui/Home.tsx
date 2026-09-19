@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
 import { createRoom, joinRoom, type GameRoom } from "../net/client.ts";
 import { useRoomListing } from "../net/hooks.ts";
@@ -31,12 +31,12 @@ export function Home({ onJoined }: Props) {
 
   const opts = () => ({ name: name.trim() || undefined });
 
-  function onCreate(e: FormEvent) {
+  function onCreate(e: SubmitEvent) {
     e.preventDefault();
     void run(() => createRoom({ ...opts(), mapId }));
   }
 
-  function onJoin(e: FormEvent) {
+  function onJoin(e: SubmitEvent) {
     e.preventDefault();
     const id = roomId.trim();
     if (!id) return;

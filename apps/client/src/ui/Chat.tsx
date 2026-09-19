@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { MAX_CHAT_LENGTH } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
 import { useChatFeed } from "../net/hooks.ts";
@@ -17,7 +17,7 @@ export function Chat({ room }: Props) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [feed]);
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;

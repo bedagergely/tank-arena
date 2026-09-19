@@ -21,9 +21,19 @@ export const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? defaultEndp
 export const sdk = new ColyseusSDK<typeof server>(SERVER_URL);
 
 export function createRoom(options: JoinOptions): Promise<GameRoom> {
-  return sdk.create(GAME_ROOM, options);
+  return sdk.create(GAME_ROOM, options).then(withInitialState);
 }
 
 export function joinRoom(roomId: string, options: JoinOptions): Promise<GameRoom> {
-  return sdk.joinById(roomId, options) as Promise<GameRoom>;
+  return (sdk.joinById(roomId, options) as Promise<GameRoom>).then(withInitialState);
+}
+
+/** Join resolves before the first full state arrives; the UI needs `room.state` populated. */
+function withInitialState(room: GameRoom): Promise<GameRoom> {
+  if (room.state) return Promise.resolve(room);
+  return new Promise((resolve, reject) => {
+    room.onStateChange.once(() => resolve(room));
+    room.onLeave.once((code) => reject(new Error(`Left room before receiving state (code ${code})`)));
+    room.onError.once((code, message) => reject(new Error(message ?? `Room error ${code}`)));
+  });
 }
