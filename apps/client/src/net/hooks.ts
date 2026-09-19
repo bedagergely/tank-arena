@@ -45,7 +45,12 @@ export function useChatFeed(room: GameRoom): FeedEntry[] {
   return feed;
 }
 
-/** Live list of open game rooms via Colyseus' LobbyRoom. */
+/** Rooms a new player can actually join: our room type, still in the lobby, with a free seat. */
+function isJoinable(r: RoomListing): boolean {
+  return r.name === GAME_ROOM && (r.metadata?.phase ?? "lobby") === "lobby" && r.clients < r.maxClients;
+}
+
+/** Live list of joinable game rooms via Colyseus' LobbyRoom. */
 export function useRoomListing(enabled: boolean): { rooms: RoomListing[]; error: string | null } {
   const [rooms, setRooms] = useState<RoomListing[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +66,14 @@ export function useRoomListing(enabled: boolean): { rooms: RoomListing[]; error:
         // Handlers are registered before the cancelled check so the lobby's initial
         // "rooms" push is consumed even when the effect was torn down mid-join.
         room.onMessage("rooms", (list: RoomListing[]) => {
-          if (!cancelled) setRooms(list.filter((r) => r.name === GAME_ROOM));
+          if (!cancelled) setRooms(list.filter(isJoinable));
         });
         room.onMessage("+", ([roomId, data]: [string, RoomListing]) => {
-          if (cancelled || data.name !== GAME_ROOM) return;
-          setRooms((prev) => [...prev.filter((r) => r.roomId !== roomId), data]);
+          if (cancelled) return;
+          setRooms((prev) => {
+            const rest = prev.filter((r) => r.roomId !== roomId);
+            return isJoinable(data) ? [...rest, data] : rest;
+          });
         });
         room.onMessage("-", (roomId: string) => {
           if (!cancelled) setRooms((prev) => prev.filter((r) => r.roomId !== roomId));
