@@ -58,18 +58,24 @@ export function useRoomListing(enabled: boolean): { rooms: RoomListing[]; error:
     sdk
       .joinOrCreate("lobby")
       .then((room) => {
+        // Handlers are registered before the cancelled check so the lobby's initial
+        // "rooms" push is consumed even when the effect was torn down mid-join.
+        room.onMessage("rooms", (list: RoomListing[]) => {
+          if (!cancelled) setRooms(list.filter((r) => r.name === GAME_ROOM));
+        });
+        room.onMessage("+", ([roomId, data]: [string, RoomListing]) => {
+          if (cancelled || data.name !== GAME_ROOM) return;
+          setRooms((prev) => [...prev.filter((r) => r.roomId !== roomId), data]);
+        });
+        room.onMessage("-", (roomId: string) => {
+          if (!cancelled) setRooms((prev) => prev.filter((r) => r.roomId !== roomId));
+        });
         if (cancelled) {
           void room.leave();
           return;
         }
         lobby = room;
         setError(null);
-        room.onMessage("rooms", (list: RoomListing[]) => setRooms(list.filter((r) => r.name === GAME_ROOM)));
-        room.onMessage("+", ([roomId, data]: [string, RoomListing]) => {
-          if (data.name !== GAME_ROOM) return;
-          setRooms((prev) => [...prev.filter((r) => r.roomId !== roomId), data]);
-        });
-        room.onMessage("-", (roomId: string) => setRooms((prev) => prev.filter((r) => r.roomId !== roomId)));
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
 

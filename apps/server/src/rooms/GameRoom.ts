@@ -342,7 +342,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   }
 
   private system(text: string) {
-    this.broadcast("system", { text, at: Date.now() });
+    this.broadcast("system", { text, at: Date.now() }, { afterNextPatch: true });
   }
 }
 

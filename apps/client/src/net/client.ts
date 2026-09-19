@@ -28,9 +28,12 @@ export function joinRoom(roomId: string, options: JoinOptions): Promise<GameRoom
   return (sdk.joinById(roomId, options) as Promise<GameRoom>).then(withInitialState);
 }
 
-/** Join resolves before the first full state arrives; the UI needs `room.state` populated. */
+/**
+ * Join resolves before the first full state arrives: the handshake only creates an empty
+ * reflected state (no maps yet), so wait for the first `ROOM_STATE` before handing the room to the UI.
+ */
 function withInitialState(room: GameRoom): Promise<GameRoom> {
-  if (room.state) return Promise.resolve(room);
+  if (room.state?.players !== undefined) return Promise.resolve(room);
   return new Promise((resolve, reject) => {
     room.onStateChange.once(() => resolve(room));
     room.onLeave.once((code) => reject(new Error(`Left room before receiving state (code ${code})`)));
