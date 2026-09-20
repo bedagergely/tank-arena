@@ -1,14 +1,32 @@
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
+import { useRoomMessage } from "@colyseus/react";
 import { MAX_CHAT_LENGTH } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
-import { useChatFeed } from "../net/hooks.ts";
 
 interface Props {
   room: GameRoom;
 }
 
+interface FeedEntry {
+  id: number;
+  kind: "chat" | "system";
+  name?: string;
+  from?: string;
+  text: string;
+  at: number;
+}
+
+const MAX_FEED = 200;
+
 export function Chat({ room }: Props) {
-  const feed = useChatFeed(room);
+  // The server only relays chat; this component's state is the only copy of the feed.
+  const [feed, setFeed] = useState<FeedEntry[]>([]);
+  const nextId = useRef(1);
+  const push = (entry: Omit<FeedEntry, "id">) =>
+    setFeed((prev) => [...prev, { ...entry, id: nextId.current++ }].slice(-MAX_FEED));
+  useRoomMessage(room, "chat", (m) => push({ kind: "chat", name: m.name, from: m.from, text: m.text, at: m.at }));
+  useRoomMessage(room, "system", (m) => push({ kind: "system", text: m.text, at: m.at }));
+
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLUListElement>(null);
 

@@ -1,46 +1,41 @@
-import { useState, type SubmitEvent } from "react";
+import { useMemo, useState, type SubmitEvent } from "react";
+import { useLobbyRoom } from "@colyseus/react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
-import { createRoom, joinRoom, type GameRoom } from "../net/client.ts";
-import { useRoomListing } from "../net/hooks.ts";
+import { isJoinable, joinLobby, type JoinRequest, type ListingMetadata } from "../net/client.ts";
 
 interface Props {
-  onJoined: (room: GameRoom) => void;
+  onJoin: (request: JoinRequest) => void;
+  busy: boolean;
+  error: Error | undefined;
 }
 
 const NAME_KEY = "tank-arena.name";
 
-export function Home({ onJoined }: Props) {
+export function Home({ onJoin, busy, error }: Props) {
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
   const [mapId, setMapId] = useState(DEFAULT_MAP_ID);
   const [roomId, setRoomId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { rooms, error: listError } = useRoomListing(!busy);
+  const lobby = useLobbyRoom<ListingMetadata>(joinLobby);
+  const rooms = useMemo(() => lobby.rooms.filter(isJoinable), [lobby.rooms]);
+  const listError = lobby.error?.message;
 
-  async function run(action: () => Promise<GameRoom>) {
-    setBusy(true);
-    setError(null);
+  function run(request: JoinRequest) {
     localStorage.setItem(NAME_KEY, name.trim());
-    try {
-      onJoined(await action());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not connect to the server.");
-      setBusy(false);
-    }
+    onJoin(request);
   }
 
   const opts = () => ({ name: name.trim() || undefined });
 
   function onCreate(e: SubmitEvent) {
     e.preventDefault();
-    void run(() => createRoom({ ...opts(), mapId }));
+    run({ kind: "create", options: { ...opts(), mapId } });
   }
 
-  function onJoin(e: SubmitEvent) {
+  function onJoinById(e: SubmitEvent) {
     e.preventDefault();
     const id = roomId.trim();
     if (!id) return;
-    void run(() => joinRoom(id, opts()));
+    run({ kind: "join", roomId: id, options: opts() });
   }
 
   return (
@@ -77,7 +72,7 @@ export function Home({ onJoined }: Props) {
           </button>
         </form>
 
-        <form className="card" onSubmit={onJoin}>
+        <form className="card" onSubmit={onJoinById}>
           <h2>Join a room</h2>
           <label className="field">
             <span>Room ID</span>
@@ -102,7 +97,7 @@ export function Home({ onJoined }: Props) {
                 <span className="muted">
                   {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
                 </span>
-                <button type="button" disabled={busy} onClick={() => void run(() => joinRoom(r.roomId, opts()))}>
+                <button type="button" disabled={busy} onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}>
                   Join
                 </button>
               </li>
@@ -111,7 +106,7 @@ export function Home({ onJoined }: Props) {
         </form>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error">{error.message || "Could not connect to the server."}</p>}
       <p className="muted help">Move: W/S or ↑/↓ · Turn: A/D or ←/→ · Fire: Space</p>
     </main>
   );

@@ -190,6 +190,12 @@ importers:
 
   apps/client:
     dependencies:
+      '@colyseus/react':
+        specifier: ^0.18.2
+        version: 0.18.2(@colyseus/schema@5.0.27(typescript@5.9.3))(@colyseus/sdk@0.18.2(@colyseus/core@0.18.12)(typescript@5.9.3)(zod@4.6.2))(@colyseus/shared-types@0.18.2)(react@19.3.0)
+      '@colyseus/schema':
+        specifier: ^5.0.27
+        version: 5.0.27(typescript@5.9.3)
       '@colyseus/sdk':
         specifier: ^0.18.1
         version: 0.18.2(@colyseus/core@0.18.12)(typescript@5.9.3)(zod@4.6.2)
@@ -431,6 +437,14 @@ packages:
         optional: true
       zod:
         optional: true
+
+  '@colyseus/react@0.18.2':
+    resolution: {integrity: sha512-E+S6ehL/ZwRKlKafK6tTJXFGS1NH5EXMsHBpGPJPW5t3TD0dPuZXndvAV6NnsxQTfdV0wcww1uAAv2Y2RT0jgA==}
+    peerDependencies:
+      '@colyseus/schema': ^5.0.8
+      '@colyseus/sdk': ^0.18.2
+      '@colyseus/shared-types': ^0.18.1
+      react: '>=18.3.1'
 
   '@colyseus/redis-driver@0.18.2':
     resolution: {integrity: sha512-qYURWjVDOTKI3Mn/WZ/y65vx3dEnQhHmY0dcRfKUx4fgFZCU4m4fWeKLSj+ndS/gAROA+v0uWeXCPu8Gmc4H4w==}
@@ -2596,6 +2610,13 @@ snapshots:
       '@colyseus/core': 0.18.12(@colyseus/auth@0.18.2)(@colyseus/better-call@1.3.3(zod@4.6.2))(@colyseus/schema@5.0.27(typescript@5.9.3))(@colyseus/ws-transport@0.18.2)(@pm2/io@6.1.0(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.2)
     optionalDependencies:
       zod: 4.6.2
+
+  '@colyseus/react@0.18.2(@colyseus/schema@5.0.27(typescript@5.9.3))(@colyseus/sdk@0.18.2(@colyseus/core@0.18.12)(typescript@5.9.3)(zod@4.6.2))(@colyseus/shared-types@0.18.2)(react@19.3.0)':
+    dependencies:
+      '@colyseus/schema': 5.0.27(typescript@5.9.3)
+      '@colyseus/sdk': 0.18.2(@colyseus/core@0.18.12)(typescript@5.9.3)(zod@4.6.2)
+      '@colyseus/shared-types': 0.18.2
+      react: 19.3.0
 
   '@colyseus/redis-driver@0.18.2(@colyseus/auth@0.18.2)(@colyseus/better-call@1.3.3(zod@4.6.2))(@colyseus/schema@5.0.27(typescript@5.9.3))(@colyseus/ws-transport@0.18.2)(@pm2/io@6.1.0(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(supports-color@7.2.0)(zod@4.6.2)':
     dependencies:

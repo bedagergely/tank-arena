@@ -1,13 +1,13 @@
 import { colorFor } from "../game/GameRenderer.ts";
-import type { GameRoom } from "../net/client.ts";
+import type { GameRoom, GameStateSnapshot } from "../net/client.ts";
 
 interface Props {
   room: GameRoom;
+  state: GameStateSnapshot;
 }
 
-export function PlayerList({ room }: Props) {
-  const { state } = room;
-  const players = [...state.players.values()].sort((a, b) => a.slot - b.slot);
+export function PlayerList({ room, state }: Props) {
+  const players = Object.values(state.players).sort((a, b) => a.slot - b.slot);
   const inLobby = state.phase === "lobby";
 
   return (

@@ -1,3 +1,4 @@
+import type { Snapshot } from "@colyseus/react";
 import { ColyseusSDK, type Room, type RoomAvailable } from "@colyseus/sdk";
 import type { JoinOptions } from "@tank-arena/shared";
 // Type-only imports: nothing from the server ends up in the browser bundle.
@@ -7,7 +8,18 @@ import type { GameState } from "@tank-arena/server/rooms/schema/GameState";
 
 export type { GameState };
 export type GameRoom = Room<ServerGameRoom, GameState>;
-export type RoomListing = RoomAvailable<{ mapId?: string; phase?: string }>;
+/** Immutable plain-object view of the room state as produced by `useRoomState`. */
+export type GameStateSnapshot = Snapshot<GameState>;
+export interface ListingMetadata {
+  mapId?: string;
+  phase?: string;
+}
+export type RoomListing = RoomAvailable<ListingMetadata>;
+
+/** What the player asked for on the home screen; `useRoom` turns it into a connection. */
+export type JoinRequest =
+  | { kind: "create"; options: JoinOptions }
+  | { kind: "join"; roomId: string; options: JoinOptions };
 
 export const GAME_ROOM = "game";
 
@@ -20,12 +32,25 @@ export const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? defaultEndp
 
 export const sdk = new ColyseusSDK<typeof server>(SERVER_URL);
 
+export function connect(request: JoinRequest): Promise<GameRoom> {
+  return request.kind === "create" ? createRoom(request.options) : joinRoom(request.roomId, request.options);
+}
+
 export function createRoom(options: JoinOptions): Promise<GameRoom> {
   return sdk.create(GAME_ROOM, options).then(withInitialState);
 }
 
 export function joinRoom(roomId: string, options: JoinOptions): Promise<GameRoom> {
   return (sdk.joinById(roomId, options) as Promise<GameRoom>).then(withInitialState);
+}
+
+export function joinLobby(): Promise<Room> {
+  return sdk.joinOrCreate("lobby");
+}
+
+/** Rooms a new player can actually join: our room type, still in the lobby, with a free seat. */
+export function isJoinable(r: RoomListing): boolean {
+  return r.name === GAME_ROOM && (r.metadata?.phase ?? "lobby") === "lobby" && r.clients < r.maxClients;
 }
 
 /**

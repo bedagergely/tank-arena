@@ -2,17 +2,18 @@ import { useEffect, useRef } from "react";
 import type { GameMap } from "@tank-arena/shared";
 import { GameRenderer } from "../game/GameRenderer.ts";
 import { useKeyboardInput } from "../game/useKeyboardInput.ts";
-import type { GameRoom } from "../net/client.ts";
+import type { GameRoom, GameStateSnapshot } from "../net/client.ts";
 
 interface Props {
   room: GameRoom;
+  /** Snapshot for React rendering; the PixiJS renderer reads the live `room.state` itself. */
+  state: GameStateSnapshot;
   map: GameMap;
 }
 
 /** Hosts the PixiJS canvas and the overlay for non-playing phases. */
-export function Arena({ room, map }: Props) {
+export function Arena({ room, state, map }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const { state } = room;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -34,8 +35,8 @@ export function Arena({ room, map }: Props) {
 
   useKeyboardInput(room, state.phase === "playing");
 
-  const me = state.players.get(room.sessionId);
-  const overlay = overlayFor(room, me?.slot ?? -1);
+  const me = state.players[room.sessionId];
+  const overlay = overlayFor(room, state, me?.slot ?? -1);
 
   return (
     <div className="arena" style={{ width: map.width, height: map.height }}>
@@ -45,11 +46,10 @@ export function Arena({ room, map }: Props) {
   );
 }
 
-function overlayFor(room: GameRoom, mySlot: number) {
-  const { state } = room;
+function overlayFor(room: GameRoom, state: GameStateSnapshot, mySlot: number) {
   switch (state.phase) {
     case "lobby": {
-      const seated = [...state.players.values()].filter((p) => p.slot >= 0).length;
+      const seated = Object.values(state.players).filter((p) => p.slot >= 0).length;
       return (
         <>
           <h2>Waiting for players</h2>
@@ -67,7 +67,7 @@ function overlayFor(room: GameRoom, mySlot: number) {
         </>
       );
     case "finished": {
-      const winner = [...state.players.values()].find((p) => p.slot === state.winnerSlot);
+      const winner = Object.values(state.players).find((p) => p.slot === state.winnerSlot);
       const title =
         state.winnerSlot < 0 ? "Draw" : state.winnerSlot === mySlot ? "You win!" : `${winner?.name ?? "Opponent"} wins`;
       return (

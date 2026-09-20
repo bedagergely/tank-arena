@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@colyseus/react": "^0.18.2",
+    "@colyseus/schema": "^5.0.27",
     "@colyseus/sdk": "^0.18.1",
     "@tank-arena/shared": "workspace:*",
     "pixi.js": "^8.14.0",
