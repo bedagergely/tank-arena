@@ -1,7 +1,7 @@
-import { useMemo, useState, type SubmitEvent } from "react";
+import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useLobbyRoom } from "@colyseus/react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
-import { isJoinable, joinLobby, type JoinRequest, type ListingMetadata } from "../net/client.ts";
+import { isJoinable, joinLobby, LOBBY_FILTER, type JoinRequest, type ListingMetadata } from "../net/client.ts";
 
 interface Props {
   onJoin: (request: JoinRequest) => void;
@@ -16,6 +16,10 @@ export function Home({ onJoin, busy, error }: Props) {
   const [mapId, setMapId] = useState(DEFAULT_MAP_ID);
   const [roomId, setRoomId] = useState("");
   const lobby = useLobbyRoom<ListingMetadata>(joinLobby);
+  // Runs after useLobbyRoom's own effect has subscribed, so this re-request is not lost.
+  useEffect(() => {
+    lobby.room?.send("filter", LOBBY_FILTER);
+  }, [lobby.room]);
   const rooms = useMemo(() => lobby.rooms.filter(isJoinable), [lobby.rooms]);
   const listError = lobby.error?.message;
 

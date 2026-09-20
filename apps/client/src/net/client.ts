@@ -44,8 +44,20 @@ export function joinRoom(roomId: string, options: JoinOptions): Promise<GameRoom
   return (sdk.joinById(roomId, options) as Promise<GameRoom>).then(withInitialState);
 }
 
+/** Server-side LobbyRoom filter: only our room type, only rooms still in the lobby phase. */
+export const LOBBY_FILTER = { name: GAME_ROOM, metadata: { phase: "lobby" } };
+
+/**
+ * The LobbyRoom pushes the initial "rooms" list right after join, before `useLobbyRoom`
+ * has had a chance to register its handler (it does so in an effect). Absorb that push so
+ * the SDK does not log an unhandled-message warning; `Home` asks for the list again once
+ * subscribed by sending `LOBBY_FILTER`.
+ */
 export function joinLobby(): Promise<Room> {
-  return sdk.joinOrCreate("lobby");
+  return sdk.joinOrCreate("lobby", { filter: LOBBY_FILTER }).then((room) => {
+    room.onMessage("rooms", () => {});
+    return room;
+  });
 }
 
 /** Rooms a new player can actually join: our room type, still in the lobby, with a free seat. */
