@@ -1,6 +1,7 @@
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
 import { isWall, TILE_WALL, type GameMap, type GameEventMessage } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
+import { playBeep } from "./Sound.ts";
 
 export const SLOT_COLORS = [0x4fc3f7, 0xff8a65, 0x81c784, 0xffd54f, 0xba68c8, 0x90a4ae];
 
@@ -193,7 +194,10 @@ export class GameRenderer {
     switch (e.type) {
       case "fire": {
         const t = this.tanks.get(e.slot);
-        if (t) this.burst(t.x + Math.cos(t.angle) * 20, t.y + Math.sin(t.angle) * 20, 0xfff3b0, 6, 90);
+        if (t) {
+          this.burst(t.x + Math.cos(t.angle) * 20, t.y + Math.sin(t.angle) * 20, 0xfff3b0, 6, 90);
+          playBeep();
+        } 
         break;
       }
       case "bounce":
