@@ -1,13 +1,12 @@
 import { defineServer, defineRoom, monitor, LobbyRoom } from "colyseus";
 import { listMaps } from "@tank-arena/shared";
-import { GameRoom } from "./rooms/GameRoom.ts";
+import { gameRoom, GameRoom } from "./rooms/GameRoom.ts";
 
 export const GAME_ROOM = "game";
 
 const server = defineServer({
   rooms: {
-    // Default 2-player duel. Add variants with `gameRoom({ rules: {...} })`.
-    [GAME_ROOM]: defineRoom(GameRoom).enableRealtimeListing(),
+    [GAME_ROOM]: defineRoom(gameRoom({rules: {maxPlayers: 4, minPlayers: 2}})).enableRealtimeListing(),
     lobby: defineRoom(LobbyRoom),
   },
 
@@ -21,5 +20,10 @@ const server = defineServer({
     }
   },
 });
+
+const latency = Number(process.env.LATENCY) || 0;
+if (process.env.NODE_ENV !== "production" && !!latency) {
+  server.simulateLatency(latency); 
+}
 
 export default server;
