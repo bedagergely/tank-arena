@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineServer, defineRoom, monitor, LobbyRoom } from "colyseus";
 import express from "express";
 import { listMaps } from "@tank-arena/shared";
-import { gameRoom, GameRoom } from "./rooms/GameRoom.ts";
+import { gameRoom } from "./rooms/GameRoom.ts";
 
 export const GAME_ROOM = "game";
 
