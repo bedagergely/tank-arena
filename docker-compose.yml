@@ -1,3 +1,4 @@
+# Plain HTTP on port 80. For HTTPS, add docker-compose.tls.yml (see DEPLOY.md).
 services:
   game:
     build: .
@@ -15,19 +16,8 @@ services:
       - game
     ports:
       - "80:80"
-      - "443:443"
     environment:
-      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      DOMAIN: ${DOMAIN:-_}
     volumes:
-      - ./deploy/nginx/templates:/etc/nginx/templates:ro
-      - ./deploy/nginx/40-reload-timer.sh:/docker-entrypoint.d/40-reload-timer.sh:ro
-      - ./deploy/certbot/conf:/etc/letsencrypt:ro
-      - ./deploy/certbot/www:/var/www/certbot:ro
-
-  certbot:
-    image: certbot/certbot
-    restart: unless-stopped
-    volumes:
-      - ./deploy/certbot/conf:/etc/letsencrypt
-      - ./deploy/certbot/www:/var/www/certbot
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+      - ./deploy/nginx/http:/etc/nginx/templates:ro
+      - ./deploy/nginx/proxy.conf:/etc/nginx/snippets/proxy.conf:ro

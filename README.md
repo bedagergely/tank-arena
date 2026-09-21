@@ -53,7 +53,8 @@ the client is hosted elsewhere. The Colyseus monitor is at
 ## Deployment
 
 `Dockerfile` builds a self-contained image; `docker-compose.yml` runs it behind
-Nginx with Let's Encrypt TLS. See [DEPLOY.md](DEPLOY.md).
+Nginx on HTTP, and `docker-compose.tls.yml` optionally adds Let's Encrypt TLS.
+See [DEPLOY.md](DEPLOY.md).
 
 ## Architecture
 

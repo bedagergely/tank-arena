@@ -6,9 +6,18 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-[ -f .env ] || { echo "Missing .env (copy .env.example and set DOMAIN and EMAIL)"; exit 1; }
+[ -f .env ] || { echo "Missing .env (copy .env.example and edit it)"; exit 1; }
 set -a; . ./.env; set +a
-: "${DOMAIN:?set DOMAIN in .env}" "${EMAIL:?set EMAIL in .env}"
+
+fail() { echo "$1"; exit 1; }
+case "${COMPOSE_FILE:-}" in
+  *docker-compose.tls.yml*) ;;
+  *) fail "HTTPS is not enabled: add COMPOSE_FILE=docker-compose.yml:docker-compose.tls.yml to .env";;
+esac
+[ -n "${DOMAIN:-}" ] || fail "set DOMAIN in .env"
+[ -n "${EMAIL:-}" ] || fail "set EMAIL in .env"
+case "$DOMAIN" in *example.com) fail "DOMAIN=$DOMAIN is the placeholder from .env.example; set your real domain in .env";; esac
+case "$EMAIL" in *@example.com) fail "EMAIL=$EMAIL is the placeholder from .env.example; set your real address in .env";; esac
 
 live="/etc/letsencrypt/live/$DOMAIN"
 if [ -e "deploy/certbot/conf/live/$DOMAIN/fullchain.pem" ]; then

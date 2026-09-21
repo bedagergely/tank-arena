@@ -1,0 +1,17 @@
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ""      close;
+}
+
+server {
+  listen 80;
+  listen [::]:80;
+  server_name ${DOMAIN};
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml;
+
+  location / {
+    include /etc/nginx/snippets/proxy.conf;
+  }
+}
