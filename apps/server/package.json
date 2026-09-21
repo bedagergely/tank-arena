@@ -5,6 +5,7 @@
   "description": "Authoritative Colyseus game server",
   "type": "module",
   "main": "build/index.js",
+  "files": ["build"],
   "engines": {
     "node": ">=22"
   },

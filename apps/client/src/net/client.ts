@@ -23,9 +23,11 @@ export type JoinRequest =
 
 export const GAME_ROOM = "game";
 
+/** Dev: Vite on :3000 talks to the server on :2567. Production: the server serves the client, same origin. */
 function defaultEndpoint(): string {
-  const { protocol, hostname } = window.location;
-  return `${protocol === "https:" ? "wss" : "ws"}://${hostname}:2567`;
+  const { protocol, host, hostname } = window.location;
+  const scheme = protocol === "https:" ? "wss" : "ws";
+  return import.meta.env.DEV ? `${scheme}://${hostname}:2567` : `${scheme}://${host}`;
 }
 
 export const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? defaultEndpoint();
