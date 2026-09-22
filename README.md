@@ -28,6 +28,11 @@ Open http://localhost:3000 in two tabs, create a room in one and join it from th
 other (by ID or from the open-rooms list). The host presses **Start**, or both
 players toggle **Ready**.
 
+For quick solo testing open http://localhost:3000/?split instead: two clients run
+side by side on one page, Player 1 (WASD + Space) creates a room, Player 2
+(arrows + Enter) joins it, and the first round starts automatically. Add
+`&map=<id>` to pick the map or `&manual` to go through Ready/Start yourself.
+
 | Action  | Keys                     |
 | ------- | ------------------------ |
 | Move    | `W`/`S` or `↑`/`↓`       |

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type SubmitEvent } from "react";
+import { useContext, useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useLobbyRoom } from "@colyseus/react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
 import { isJoinable, joinLobby, LOBBY_FILTER, type JoinRequest, type ListingMetadata } from "../net/client.ts";
+import { KeyBindingsContext } from "../game/keyBindings.ts";
 
 interface Props {
   onJoin: (request: JoinRequest) => void;
@@ -22,6 +23,7 @@ export function Home({ onJoin, busy, error }: Props) {
   }, [lobby.room]);
   const rooms = useMemo(() => lobby.rooms.filter(isJoinable), [lobby.rooms]);
   const listError = lobby.error?.message;
+  const bindings = useContext(KeyBindingsContext);
 
   function run(request: JoinRequest) {
     localStorage.setItem(NAME_KEY, name.trim());
@@ -111,7 +113,7 @@ export function Home({ onJoin, busy, error }: Props) {
       </div>
 
       {error && <p className="error">{error.message || "Could not connect to the server."}</p>}
-      <p className="muted help">Move: W/S or ↑/↓ · Turn: A/D or ←/→ · Fire: Space</p>
+      <p className="muted help">{bindings.hint}</p>
     </main>
   );
 }

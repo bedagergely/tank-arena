@@ -1,12 +1,7 @@
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { IDLE_INPUT, type PlayerInput } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
-
-const FORWARD = new Set(["KeyW", "ArrowUp"]);
-const BACK = new Set(["KeyS", "ArrowDown"]);
-const LEFT = new Set(["KeyA", "ArrowLeft"]);
-const RIGHT = new Set(["KeyD", "ArrowRight"]);
-const FIRE = new Set(["Space", "Enter"]);
+import { KeyBindingsContext } from "./keyBindings.ts";
 
 function axis(neg: boolean, pos: boolean): -1 | 0 | 1 {
   if (neg === pos) return 0;
@@ -20,10 +15,20 @@ function sameInput(a: PlayerInput, b: PlayerInput): boolean {
 /**
  * Translates held keys into a `PlayerInput` and sends it to the server whenever
  * it changes. The server only ever receives intents; it decides what happens.
+ * Which keys count comes from `KeyBindingsContext`, so several rooms on one page
+ * can each listen to their own set.
  */
 export function useKeyboardInput(room: GameRoom, active: boolean): void {
+  const bindings = useContext(KeyBindingsContext);
+
   useEffect(() => {
     if (!active) return;
+
+    const FORWARD = new Set(bindings.forward);
+    const BACK = new Set(bindings.back);
+    const LEFT = new Set(bindings.left);
+    const RIGHT = new Set(bindings.right);
+    const FIRE = new Set(bindings.fire);
 
     const held = new Set<string>();
     let last: PlayerInput = IDLE_INPUT;
@@ -67,7 +72,7 @@ export function useKeyboardInput(room: GameRoom, active: boolean): void {
       window.removeEventListener("blur", release);
       release();
     };
-  }, [room, active]);
+  }, [room, active, bindings]);
 }
 
 function isTyping(target: EventTarget | null): boolean {

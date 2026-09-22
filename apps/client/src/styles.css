@@ -301,3 +301,32 @@ select:focus {
 .chat-form input {
   flex: 1;
 }
+
+/* Dev split-screen (?split) ---------------------------------------------- */
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+}
+.split-pane {
+  zoom: 0.6;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+.split-pane:last-child {
+  border-right: 0;
+}
+.split-header {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.6rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+@media (min-width: 2000px) {
+  .split-pane {
+    zoom: 0.8;
+  }
+}
