@@ -44,9 +44,17 @@ pnpm build          # apps/server/build/index.js, apps/client/dist/
 pnpm --filter @tank-arena/server start
 ```
 
-Set `VITE_SERVER_URL` (e.g. `wss://game.example.com`) when the client is not served
-from the same host as the server. The Colyseus monitor is at
+In production the server serves `apps/client/dist` itself and the client connects
+to the origin it was loaded from, so a single port hosts the game. Set
+`VITE_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
+the client is hosted elsewhere. The Colyseus monitor is at
 `http://localhost:2567/monitor` outside production.
+
+## Deployment
+
+`Dockerfile` builds a self-contained image; `docker-compose.yml` runs it behind
+Nginx on HTTP, and `docker-compose.tls.yml` optionally adds Let's Encrypt TLS.
+See [DEPLOY.md](DEPLOY.md).
 
 ## Architecture
 

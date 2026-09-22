@@ -8,3 +8,4 @@ coverage
 .colyseus-cloud.json
 .devmode.json
 .DS_Store
+deploy/certbot/

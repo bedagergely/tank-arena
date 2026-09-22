@@ -1,8 +1,14 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { defineServer, defineRoom, monitor, LobbyRoom } from "colyseus";
+import express from "express";
 import { listMaps } from "@tank-arena/shared";
-import { gameRoom, GameRoom } from "./rooms/GameRoom.ts";
+import { gameRoom } from "./rooms/GameRoom.ts";
 
 export const GAME_ROOM = "game";
+
+/** Built client (`apps/client/dist`); served by this process when present so a single port hosts the game. */
+const CLIENT_DIR = process.env.CLIENT_DIR ?? fileURLToPath(new URL("../../client/dist", import.meta.url));
 
 const server = defineServer({
   rooms: {
@@ -17,6 +23,10 @@ const server = defineServer({
 
     if (process.env.NODE_ENV !== "production") {
       app.use("/monitor", monitor());
+    }
+
+    if (existsSync(CLIENT_DIR)) {
+      app.use(express.static(CLIENT_DIR));
     }
   },
 });

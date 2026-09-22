@@ -1,0 +1,23 @@
+# Plain HTTP on port 80. For HTTPS, add docker-compose.tls.yml (see DEPLOY.md).
+services:
+  game:
+    build: .
+    image: tank-arena
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    expose:
+      - "2567"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - game
+    ports:
+      - "80:80"
+    environment:
+      DOMAIN: ${DOMAIN:-_}
+    volumes:
+      - ./deploy/nginx/http:/etc/nginx/templates:ro
+      - ./deploy/nginx/proxy.conf:/etc/nginx/snippets/proxy.conf:ro
