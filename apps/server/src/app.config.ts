@@ -12,7 +12,7 @@ const CLIENT_DIR = process.env.CLIENT_DIR ?? fileURLToPath(new URL("../../client
 
 const server = defineServer({
   rooms: {
-    [GAME_ROOM]: defineRoom(gameRoom({rules: {maxPlayers: 4, minPlayers: 2}})).enableRealtimeListing(),
+    [GAME_ROOM]: defineRoom(gameRoom({rules: {maxPlayers: 4, minPlayers: 1, bullet: {maxPerTank: 5}}})).enableRealtimeListing(),
     lobby: defineRoom(LobbyRoom),
   },
 
