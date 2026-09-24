@@ -308,10 +308,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       }
     }
 
-    const seen = new Set<string>();
     for (const bullet of world.bullets) {
       const key = String(bullet.id);
-      seen.add(key);
       let bulletState = this.state.bullets.get(key);
       if (!bulletState) {
         bulletState = new BulletState({ id: bullet.id, ownerSlot: bullet.ownerSlot, x: bullet.x, y: bullet.y, bounces: bullet.bounces });
