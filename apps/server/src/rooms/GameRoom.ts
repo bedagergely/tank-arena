@@ -291,37 +291,41 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
 
     for (const tank of world.tanks) {
       const key = String(tank.slot);
-      let s = this.state.tanks.get(key);
-      if (!s) {
-        s = new TankState({ slot: tank.slot, x: tank.x, y: tank.y, angle: tank.angle, alive: tank.alive });
-        this.state.tanks.set(key, s);
+      let tankState = this.state.tanks.get(key);
+      if (!tankState) {
+        tankState = new TankState({ slot: tank.slot, x: tank.x, y: tank.y, angle: tank.angle, alive: tank.alive });
+        this.state.tanks.set(key, tankState);
         continue;
       }
-      s.x = tank.x;
-      s.y = tank.y;
-      s.angle = tank.angle;
-      s.alive = tank.alive;
+      tankState.x = tank.x;
+      tankState.y = tank.y;
+      tankState.angle = tank.angle;
+      tankState.alive = tank.alive;
     }
     for (const key of [...this.state.tanks.keys()]) {
-      if (!world.tanks.some((t) => String(t.slot) === key)) this.state.tanks.delete(key);
+      if (!world.tanks.some((tank) => String(tank.slot) === key)) {
+        this.state.tanks.delete(key);
+      }
     }
 
     const seen = new Set<string>();
     for (const bullet of world.bullets) {
       const key = String(bullet.id);
       seen.add(key);
-      let s = this.state.bullets.get(key);
-      if (!s) {
-        s = new BulletState({ id: bullet.id, ownerSlot: bullet.ownerSlot, x: bullet.x, y: bullet.y, bounces: bullet.bounces });
-        this.state.bullets.set(key, s);
+      let bulletState = this.state.bullets.get(key);
+      if (!bulletState) {
+        bulletState = new BulletState({ id: bullet.id, ownerSlot: bullet.ownerSlot, x: bullet.x, y: bullet.y, bounces: bullet.bounces });
+        this.state.bullets.set(key, bulletState);
         continue;
       }
-      s.x = bullet.x;
-      s.y = bullet.y;
-      s.bounces = bullet.bounces;
+      bulletState.x = bullet.x;
+      bulletState.y = bullet.y;
+      bulletState.bounces = bullet.bounces;
     }
     for (const key of [...this.state.bullets.keys()]) {
-      if (!seen.has(key)) this.state.bullets.delete(key);
+      if (!world.bullets.some((bullet) => String(bullet.id) == key)) {
+        this.state.bullets.delete(key);
+      }
     }
   }
 
