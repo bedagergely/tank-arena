@@ -301,3 +301,87 @@ select:focus {
 .chat-form input {
   flex: 1;
 }
+
+/* Map editor (dev only) --------------------------------------------------- */
+
+.editor {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: 100vh;
+}
+.editor-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  padding: 1rem 1.2rem;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.editor-panel section {
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--border);
+}
+.editor-panel h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.6rem;
+}
+.editor-panel .field {
+  margin-bottom: 0.6rem;
+  flex: 1;
+}
+.editor-panel .help {
+  margin-top: 0.4rem;
+}
+.editor-panel textarea {
+  width: 100%;
+  margin: 0.5rem 0;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.editor-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.editor-row > button {
+  margin-bottom: 0.6rem;
+}
+.editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.6rem;
+}
+.editor-errors {
+  margin: 0 0 0.6rem;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+.editor-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow: auto;
+  min-width: 0;
+}
+.editor-canvas svg {
+  width: 100%;
+  max-height: calc(100vh - 4rem);
+  border: 1px solid var(--border);
+  background: #11151c;
+  touch-action: none;
+  user-select: none;
+}
+.editor-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}

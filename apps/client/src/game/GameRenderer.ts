@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
-import { isWall, TILE_WALL, type GameMap, type GameEventMessage } from "@tank-arena/shared";
+import { type GameMap, type GameEventMessage } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
 import { playBeep } from "./Sound.ts";
 
@@ -91,16 +91,12 @@ export class GameRenderer {
 
   private buildMap(): Graphics {
     const g = new Graphics();
-    const { tileSize, cols, rows } = this.map;
     g.rect(0, 0, this.map.width, this.map.height).fill(FLOOR);
-    for (let ty = 0; ty < rows; ty++) {
-      for (let tx = 0; tx < cols; tx++) {
-        if (this.map.tiles[ty * cols + tx] !== TILE_WALL) continue;
-        g.rect(tx * tileSize, ty * tileSize, tileSize, tileSize).fill(WALL);
-        // Light edge on faces exposed to open floor for a bit of depth.
-        if (!isWall(this.map, tx, ty - 1)) g.rect(tx * tileSize, ty * tileSize, tileSize, 2).fill(WALL_EDGE);
-        if (!isWall(this.map, tx - 1, ty)) g.rect(tx * tileSize, ty * tileSize, 2, tileSize).fill(WALL_EDGE);
-      }
+    for (const w of this.map.walls) {
+      g.rect(w.x, w.y, w.width, w.height).fill(WALL);
+      // Light top/left edge for a bit of depth.
+      g.rect(w.x, w.y, w.width, Math.min(2, w.height)).fill(WALL_EDGE);
+      g.rect(w.x, w.y, Math.min(2, w.width), w.height).fill(WALL_EDGE);
     }
     return g;
   }
