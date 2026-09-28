@@ -44,6 +44,16 @@ pnpm build          # apps/server/build/index.js, apps/client/dist/
 pnpm --filter @tank-arena/server start
 ```
 
+### Map editor (dev only)
+
+With `pnpm dev` running, open http://localhost:3000/?editor to build maps visually:
+drag on the canvas to draw wall rectangles of any size, drag walls or their handles to
+move/resize, `Spawn` tool + click to place numbered spawn points, snap grid, undo/redo,
+ASCII import. **Save** writes `packages/shared/src/maps/data/<id>.ts` and regenerates
+`data/index.ts` through the Vite dev server, so the map lands in source: commit it and
+it is selectable on the home page. The endpoint only exists in `vite` dev mode, never in
+builds.
+
 In production the server serves `apps/client/dist` itself and the client connects
 to the origin it was loaded from, so a single port hosts the game. Set
 `VITE_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
@@ -79,9 +89,11 @@ client can play effects. Clients exceeding 60 messages/s are dropped by Colyseus
 
 `packages/shared/src/rules.ts` defines `GameRules` (player counts, tick rate, tank and
 bullet parameters, bounce limit, win condition) with `DEFAULT_RULES` and
-`resolveRules(overrides)`. Maps are ASCII in `packages/shared/src/maps/` (`#` wall,
-`.` floor, `1`-`9` spawn slots) compiled by `compileMap`. Register a room variant with
-different rules or engine without touching the room logic:
+`resolveRules(overrides)`. Maps are `MapSource` modules in
+`packages/shared/src/maps/data/` (world size, wall rectangles of any size, ordered
+spawn points) compiled by `compileMap`; `asciiMap` converts the old `#`/`.`/`1`-`9`
+grid notation into the same format. Register a room variant with different rules or
+engine without touching the room logic:
 
 ```ts
 // apps/server/src/app.config.ts
