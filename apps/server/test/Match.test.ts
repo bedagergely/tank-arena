@@ -57,8 +57,7 @@ describe("best-of-N match", () => {
   let colyseus: ColyseusTestServer<typeof appConfig>;
 
   beforeAll(async () => {
-    // Own port: vitest runs test files in parallel and GameRoom.test.ts boots on the default one.
-    colyseus = await boot(appConfig, 2568);
+    colyseus = await boot(appConfig);
   });
   afterAll(async () => colyseus.shutdown());
   beforeEach(async () => {
