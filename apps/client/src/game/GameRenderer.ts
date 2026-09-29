@@ -1,5 +1,14 @@
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
-import { type GameMap, type GameEventMessage } from "@tank-arena/shared";
+import {
+  PERK_BULLET_SPEED,
+  PERK_BULLETS,
+  PERK_SHIELD,
+  PERK_TANK_SPEED,
+  isPerkId,
+  type GameEventMessage,
+  type GameMap,
+  type PerkId,
+} from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
 import { playBeep } from "./Sound.ts";
 
@@ -10,16 +19,36 @@ const WALL = 0x3a4556;
 const WALL_EDGE = 0x556274;
 const FLOOR = 0x1a2029;
 
+export const PERK_COLORS: Readonly<Record<PerkId, number>> = {
+  [PERK_BULLETS]: 0xffb74d,
+  [PERK_BULLET_SPEED]: 0xff5252,
+  [PERK_TANK_SPEED]: 0x69f0ae,
+  [PERK_SHIELD]: 0x40c4ff,
+};
+const PERK_GLYPHS: Readonly<Record<PerkId, string>> = {
+  [PERK_BULLETS]: "•••",
+  [PERK_BULLET_SPEED]: "»",
+  [PERK_TANK_SPEED]: "≫",
+  [PERK_SHIELD]: "◯",
+};
+const LOOT_SIZE = 20;
+
 /** How fast displayed positions chase the server state (1/s). */
 const LERP_RATE = 18;
 
 interface TankView {
   root: Container;
   body: Graphics;
+  shield: Graphics;
   label: Text;
   x: number;
   y: number;
   angle: number;
+}
+
+interface LootView {
+  root: Container;
+  spin: number;
 }
 
 interface BulletView {
@@ -45,7 +74,9 @@ export class GameRenderer {
   private readonly fxLayer = new Container();
   private readonly tanks = new Map<number, TankView>();
   private readonly bullets = new Map<number, BulletView>();
+  private readonly loot = new Map<number, LootView>();
   private readonly particles: Particle[] = [];
+  private elapsed = 0;
   private readonly offEvent: () => void;
   private destroyed = false;
 
@@ -104,6 +135,8 @@ export class GameRenderer {
   private readonly tick = (ticker: Ticker) => {
     const dt = ticker.deltaMS / 1000;
     const k = 1 - Math.exp(-LERP_RATE * dt);
+    this.elapsed += dt;
+    this.syncLoot(dt);
     this.syncTanks(k);
     this.syncBullets(k);
     this.updateParticles(dt);
@@ -129,6 +162,13 @@ export class GameRenderer {
       view.root.alpha = t.alive ? 1 : 0.35;
       const name = names.get(t.slot) ?? `P${t.slot + 1}`;
       if (view.label.text !== name) view.label.text = name;
+
+      view.shield.visible = t.perkShield > 0;
+      if (view.shield.visible) {
+        view.shield.alpha = 0.55 + 0.35 * Math.sin(this.elapsed * 6);
+        view.shield.rotation = this.elapsed * 1.5;
+      }
+      view.body.tint = t.perkTankSpeed > 0 ? 0xd8ffe8 : 0xffffff;
     }
     for (const [slot, view] of this.tanks) {
       if (seen.has(slot)) continue;
@@ -162,6 +202,46 @@ export class GameRenderer {
     }
   }
 
+  private syncLoot(dt: number) {
+    const state = this.room.state;
+    const seen = new Set<number>();
+    for (const box of state.loot.values()) {
+      if (!isPerkId(box.perk)) continue;
+      seen.add(box.id);
+      let view = this.loot.get(box.id);
+      if (!view) {
+        view = this.createLoot(box.x, box.y, box.perk);
+        this.loot.set(box.id, view);
+      }
+      view.spin += dt * 1.2;
+      view.root.scale.set(1 + 0.08 * Math.sin(view.spin * 3));
+    }
+    for (const [id, view] of this.loot) {
+      if (seen.has(id)) continue;
+      view.root.destroy({ children: true });
+      this.loot.delete(id);
+    }
+  }
+
+  private createLoot(x: number, y: number, perk: PerkId): LootView {
+    const color = PERK_COLORS[perk];
+    const half = LOOT_SIZE / 2;
+    const box = new Graphics();
+    box.circle(0, 0, half * 1.6).fill({ color, alpha: 0.18 });
+    box.roundRect(-half, -half, LOOT_SIZE, LOOT_SIZE, 4).fill(0x232b36).stroke({ color, width: 2 });
+    const glyph = new Text({
+      text: PERK_GLYPHS[perk],
+      style: { fontFamily: "system-ui, sans-serif", fontSize: 12, fontWeight: "bold", fill: color },
+    });
+    glyph.anchor.set(0.5);
+    const root = new Container();
+    root.addChild(box, glyph);
+    root.position.set(x, y);
+    this.world.addChild(root);
+    this.burst(x, y, color, 10, 50);
+    return { root, spin: Math.random() * Math.PI * 2 };
+  }
+
   private createTank(slot: number, x: number, y: number, angle: number): TankView {
     const r = this.room.state.tankRadius;
     const color = colorFor(slot);
@@ -179,11 +259,20 @@ export class GameRenderer {
     label.anchor.set(0.5, 1);
     label.position.set(0, -r - 6);
 
+    const shield = new Graphics();
+    shield.circle(0, 0, r + 6).stroke({ color: PERK_COLORS[PERK_SHIELD], width: 2.5 });
+    shield.circle(0, 0, r + 6).fill({ color: PERK_COLORS[PERK_SHIELD], alpha: 0.12 });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      shield.circle(Math.cos(a) * (r + 6), Math.sin(a) * (r + 6), 2).fill(0xffffff);
+    }
+    shield.visible = false;
+
     const root = new Container();
-    root.addChild(body, label);
+    root.addChild(shield, body, label);
     root.position.set(x, y);
     this.world.addChild(root);
-    return { root, body, label, x, y, angle };
+    return { root, body, shield, label, x, y, angle };
   }
 
   private onEvent(e: GameEventMessage) {
@@ -204,6 +293,18 @@ export class GameRenderer {
         if (t) this.burst(t.x, t.y, colorFor(e.targetSlot), 28, 160);
         break;
       }
+      case "shield-block": {
+        const t = this.tanks.get(e.targetSlot);
+        if (t) this.burst(t.x, t.y, PERK_COLORS[PERK_SHIELD], 18, 120);
+        break;
+      }
+      case "loot-pickup": {
+        const t = this.tanks.get(e.slot);
+        if (t) this.burst(t.x, t.y, PERK_COLORS[e.perk], 14, 80);
+        break;
+      }
+      case "loot-spawn":
+        break;
     }
   }
 

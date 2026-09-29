@@ -1,4 +1,5 @@
 import type { PlayerInput } from "./engine/types.ts";
+import type { PerkId } from "./rules.ts";
 
 /** Wire payloads exchanged between client and server (msgpack-encoded by Colyseus). */
 
@@ -11,6 +12,8 @@ export interface ClientMessages {
   chat: { text: string };
   ready: { ready: boolean };
   start: Record<string, never>;
+  /** Host only, lobby only: number of rounds in the next match. */
+  setRounds: { rounds: number };
   setName: { name: string };
 }
 
@@ -30,7 +33,10 @@ export interface SystemMessage {
 export type GameEventMessage =
   | { type: "fire"; slot: number }
   | { type: "bounce"; x: number; y: number }
-  | { type: "hit"; shooterSlot: number; targetSlot: number };
+  | { type: "hit"; shooterSlot: number; targetSlot: number }
+  | { type: "shield-block"; shooterSlot: number; targetSlot: number }
+  | { type: "loot-spawn"; x: number; y: number }
+  | { type: "loot-pickup"; slot: number; perk: PerkId };
 
 /** server -> client */
 export interface ServerMessages {
@@ -45,4 +51,5 @@ export interface JoinOptions {
   mapId?: string;
 }
 
-export type Phase = "lobby" | "countdown" | "playing" | "finished";
+/** `finished` shows a round result before the next round; `match-over` shows the final result before the lobby. */
+export type Phase = "lobby" | "countdown" | "playing" | "finished" | "match-over";
