@@ -15,8 +15,8 @@ export interface GameEngine {
   /** Read-only view of the current world. Must not be mutated by callers. */
   readonly world: Readonly<World>;
 
-  /** Replace the world with fresh tanks for the given slots. */
-  reset(slots: readonly number[]): void;
+  /** Replace the world with fresh tanks for the given slots; `seed` drives loot spawning. */
+  reset(slots: readonly number[], seed?: number): void;
   /** Store the latest intent for a slot; applied on the next `step`. */
   setInput(slot: number, input: PlayerInput): void;
   /** Take a tank out of the match (e.g. its player disconnected). */
@@ -33,15 +33,15 @@ export class JsGameEngine implements GameEngine {
     public readonly map: GameMap,
     public readonly rules: GameRules,
   ) {
-    this._world = createWorld(map, []);
+    this._world = createWorld(map, [], rules);
   }
 
   get world(): Readonly<World> {
     return this._world;
   }
 
-  reset(slots: readonly number[]): void {
-    this._world = createWorld(this.map, slots);
+  reset(slots: readonly number[], seed?: number): void {
+    this._world = createWorld(this.map, slots, this.rules, seed);
     this.inputs.length = 0;
   }
 

@@ -1,12 +1,19 @@
 import { Room, type Client, type StepContext } from "colyseus";
 import {
+  clampRounds,
   createJsEngine,
   DEFAULT_MAP_ID,
   getMap,
   MAX_CHAT_LENGTH,
   MAX_NAME_LENGTH,
+  PERK_BULLET_SPEED,
+  PERK_BULLETS,
+  PERK_NAMES,
+  PERK_SHIELD,
+  PERK_TANK_SPEED,
   resolveRules,
   sanitizeInput,
+  winsNeeded,
   type EngineFactory,
   type GameEngine,
   type GameRules,
@@ -17,7 +24,7 @@ import {
   type ServerMessages,
   type TickEvent,
 } from "@tank-arena/shared";
-import { BulletState, GameState, PlayerState, TankState } from "./schema/GameState.ts";
+import { BulletState, GameState, LootState, PlayerState, TankState } from "./schema/GameState.ts";
 import { RateLimiter } from "../util/RateLimiter.ts";
 
 /**
@@ -59,6 +66,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   private engine!: GameEngine;
   private phaseTimer = 0;
   private lastCountdownShown = -1;
+  /** Seats taken when the match began; a match with fewer players left ends by forfeit. */
+  private matchSeats = 0;
 
   override messages = {
     input: (client: GameClient, payload: ClientMessages["input"]) => {
@@ -94,7 +103,16 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
         client.send("system", { text: `Need at least ${this.rules.minPlayers} players to start.`, at: Date.now() });
         return;
       }
-      this.beginCountdown();
+      this.beginMatch();
+    },
+
+    setRounds: (client: GameClient, payload: ClientMessages["setRounds"]) => {
+      if (client.sessionId !== this.state.hostSessionId) return;
+      if (this.state.phase !== "lobby") return;
+      const rounds = clampRounds(isRecord(payload) ? payload.rounds : undefined, this.rules);
+      if (rounds === undefined || rounds === this.state.rounds) return;
+      this.state.rounds = rounds;
+      this.system(`Match set to best of ${rounds} (first to ${winsNeeded(rounds)}).`);
     },
 
     setName: (client: GameClient, payload: ClientMessages["setName"]) => {
@@ -118,6 +136,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     this.state.maxPlayers = this.rules.maxPlayers;
     this.state.tankRadius = this.rules.tank.radius;
     this.state.bulletRadius = this.rules.bullet.radius;
+    this.state.rounds = clampRounds(this.rules.match.rounds, this.rules) ?? this.rules.match.rounds;
 
     void this.setMetadata({ mapId, phase: "lobby" });
     this.setFixedTimestep((ctx) => this.step(ctx), this.rules.tickRate);
@@ -173,6 +192,9 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
         this.simulate(ctx.dt);
         return;
       case "finished":
+        this.tickPhaseTimer(ctx.dt, () => this.nextRound());
+        return;
+      case "match-over":
         this.tickPhaseTimer(ctx.dt, () => this.returnToLobby());
         return;
     }
@@ -199,19 +221,49 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   private tryAutoStart() {
     const seated = this.seatedPlayers();
     if (seated.length >= this.rules.minPlayers && seated.every((p) => p.ready)) {
-      this.beginCountdown();
+      this.beginMatch();
     }
+  }
+
+  private beginMatch() {
+    const seated = this.seatedPlayers();
+    for (const p of this.state.players.values()) p.wins = 0;
+    this.state.round = 0;
+    this.state.matchWinnerSlot = -1;
+    this.matchSeats = seated.length;
+    void this.lock();
+    this.system(`Best of ${this.state.rounds}: first to ${winsNeeded(this.state.rounds)} round wins.`);
+    this.beginCountdown();
   }
 
   private beginCountdown() {
     const seated = this.seatedPlayers();
-    this.engine.reset(seated.map((p) => p.slot));
+    this.engine.reset(
+      seated.map((p) => p.slot),
+      newSeed(),
+    );
     this.syncWorld();
     this.state.round += 1;
     this.state.winnerSlot = -1;
     this.setPhase("countdown", this.rules.countdownSeconds);
-    void this.lock();
-    this.system(`Round ${this.state.round} starting...`);
+    this.system(`Round ${this.state.round} of ${this.state.rounds} starting...`);
+  }
+
+  /** After a round result: either the next round, or the match is over. */
+  private nextRound() {
+    const seated = this.seatedPlayers();
+    if (this.matchDecided(seated)) this.finishMatch(seated);
+    else this.beginCountdown();
+  }
+
+  /**
+   * True once someone holds the majority, all rounds have been played, or too
+   * few of the original players are left to continue (forfeit).
+   */
+  private matchDecided(seated: PlayerState[]): boolean {
+    const needed = winsNeeded(this.state.rounds);
+    if (seated.some((p) => p.wins >= needed) || this.state.round >= this.state.rounds) return true;
+    return seated.length < this.rules.minPlayers || (this.matchSeats > 1 && seated.length <= 1);
   }
 
   private beginPlaying() {
@@ -239,6 +291,18 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
           hit = true;
           this.broadcast("event", { type: "hit", shooterSlot: e.shooterSlot, targetSlot: e.targetSlot });
           break;
+        case "shield-block":
+          this.broadcast("event", { type: "shield-block", shooterSlot: e.shooterSlot, targetSlot: e.targetSlot });
+          break;
+        case "loot-spawn":
+          this.broadcast("event", { type: "loot-spawn", x: e.x, y: e.y });
+          break;
+        case "loot-pickup": {
+          this.broadcast("event", { type: "loot-pickup", slot: e.slot, perk: e.perk });
+          const player = this.seatedPlayers().find((p) => p.slot === e.slot);
+          if (player) this.system(`${player.name} picked up ${PERK_NAMES[e.perk]}.`);
+          break;
+        }
         case "bullet-expired":
           break;
       }
@@ -256,24 +320,37 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     if (!over) return;
 
     const winnerSlot = alive.length === 1 ? alive[0]!.slot : -1;
-    this.finishMatch(winnerSlot);
+    this.finishRound(winnerSlot);
   }
 
-  private finishMatch(winnerSlot: number) {
+  private finishRound(winnerSlot: number) {
     this.state.winnerSlot = winnerSlot;
-    const winner = this.seatedPlayers().find((p) => p.slot === winnerSlot);
+    const seated = this.seatedPlayers();
+    const winner = seated.find((p) => p.slot === winnerSlot);
     if (winner) {
       winner.wins += 1;
-      this.system(`${winner.name} wins round ${this.state.round}!`);
+      this.system(`${winner.name} wins round ${this.state.round}! (${scoreline(seated)})`);
     } else {
       this.system(`Round ${this.state.round} is a draw.`);
     }
-    this.setPhase("finished", this.rules.resultSeconds);
+    if (this.matchDecided(seated)) this.finishMatch(seated);
+    else this.setPhase("finished", this.rules.resultSeconds);
+  }
+
+  /** Match winner: the (single) player with the most round wins; a tie is a drawn match. */
+  private finishMatch(seated: PlayerState[]) {
+    const best = Math.max(0, ...seated.map((p) => p.wins));
+    const leaders = seated.filter((p) => p.wins === best);
+    const winner = leaders.length === 1 ? leaders[0] : undefined;
+    this.state.matchWinnerSlot = winner?.slot ?? -1;
+    this.system(winner ? `${winner.name} wins the match ${scoreline(seated)}!` : `The match is a draw (${scoreline(seated)}).`);
+    this.setPhase("match-over", this.rules.match.resultSeconds);
   }
 
   private returnToLobby() {
     this.state.tanks.clear();
     this.state.bullets.clear();
+    this.state.loot.clear();
     for (const player of this.state.players.values()) {
       player.ready = false;
       if (player.slot < 0) player.slot = this.nextFreeSlot();
@@ -295,12 +372,15 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       if (!s) {
         s = new TankState({ slot: tank.slot, x: tank.x, y: tank.y, angle: tank.angle, alive: tank.alive });
         this.state.tanks.set(key, s);
-        continue;
       }
       s.x = tank.x;
       s.y = tank.y;
       s.angle = tank.angle;
       s.alive = tank.alive;
+      s.perkBullets = tank.perks[PERK_BULLETS];
+      s.perkBulletSpeed = tank.perks[PERK_BULLET_SPEED];
+      s.perkTankSpeed = tank.perks[PERK_TANK_SPEED];
+      s.perkShield = tank.perks[PERK_SHIELD];
     }
     for (const key of [...this.state.tanks.keys()]) {
       if (!world.tanks.some((t) => String(t.slot) === key)) this.state.tanks.delete(key);
@@ -323,6 +403,19 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     for (const key of [...this.state.bullets.keys()]) {
       if (!seen.has(key)) this.state.bullets.delete(key);
     }
+
+    // Loot boxes never move: only additions and removals need syncing.
+    const liveLoot = new Set<string>();
+    for (const box of world.loot) {
+      const key = String(box.id);
+      liveLoot.add(key);
+      if (!this.state.loot.has(key)) {
+        this.state.loot.set(key, new LootState({ id: box.id, x: box.x, y: box.y, perk: box.perk }));
+      }
+    }
+    for (const key of [...this.state.loot.keys()]) {
+      if (!liveLoot.has(key)) this.state.loot.delete(key);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -344,6 +437,15 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   private system(text: string) {
     this.broadcast("system", { text, at: Date.now() }, { afterNextPatch: true });
   }
+}
+
+function scoreline(seated: PlayerState[]): string {
+  return seated.map((p) => p.wins).join("–");
+}
+
+/** Non-zero 32-bit seed for the round's loot RNG; the engine is deterministic given the seed. */
+function newSeed(): number {
+  return (Math.floor(Math.random() * 0xffffffff) | 0) || 1;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
