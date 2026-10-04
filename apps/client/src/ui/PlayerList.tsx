@@ -9,6 +9,7 @@ interface Props {
 export function PlayerList({ room, state }: Props) {
   const players = Object.values(state.players).sort((a, b) => a.slot - b.slot);
   const inLobby = state.phase === "lobby";
+  const isHost = state.hostSessionId === room.sessionId;
 
   return (
     <section className="players">
@@ -24,9 +25,20 @@ export function PlayerList({ room, state }: Props) {
               {p.sessionId === room.sessionId && " (you)"}
             </span>
             {p.sessionId === state.hostSessionId && <span className="tag">host</span>}
-            {inLobby && p.slot >= 0 && p.ready && <span className="tag ready">ready</span>}
+            {p.isBot && <span className="tag bot">{p.difficulty} bot</span>}
+            {inLobby && p.slot >= 0 && p.ready && !p.isBot && <span className="tag ready">ready</span>}
             {p.slot < 0 && <span className="tag">spectating</span>}
             <span className="wins">{p.wins} W</span>
+            {inLobby && isHost && p.isBot && (
+              <button
+                className="ghost kick"
+                title="Remove bot"
+                aria-label={`Remove ${p.name}`}
+                onClick={() => room.send("removeBot", { sessionId: p.sessionId })}
+              >
+                ×
+              </button>
+            )}
           </li>
         ))}
       </ul>

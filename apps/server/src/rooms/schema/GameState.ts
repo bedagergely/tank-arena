@@ -15,6 +15,10 @@ export const PlayerState = schema(
     connected: t.boolean().default(true),
     /** Round wins in the current (or last) match. */
     wins: t.uint16().default(0),
+    /** Server-controlled AI opponent (no client behind this entry). */
+    isBot: t.boolean().default(false),
+    /** Bot difficulty id; empty for humans. */
+    difficulty: t.string().default(""),
   },
   "Player",
 );

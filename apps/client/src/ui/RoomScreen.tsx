@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRoomState } from "@colyseus/react";
-import { DEFAULT_RULES, getMap, winsNeeded } from "@tank-arena/shared";
+import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, DEFAULT_RULES, getMap, winsNeeded, type BotDifficulty } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
 import { Arena } from "./Arena.tsx";
 import { Chat } from "./Chat.tsx";
@@ -19,6 +19,7 @@ const ROUND_OPTIONS = Array.from(
 export function RoomScreen({ room, onLeave }: Props) {
   const state = useRoomState(room);
   const [dropped, setDropped] = useState<string | null>(null);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>(DEFAULT_BOT_DIFFICULTY);
 
   useEffect(() => {
     const handler = (code: number) => {
@@ -51,6 +52,7 @@ export function RoomScreen({ room, onLeave }: Props) {
   const isHost = state.hostSessionId === room.sessionId;
   const seated = Object.values(state.players).filter((p) => p.slot >= 0);
   const canStart = isHost && state.phase === "lobby" && seated.length >= state.minPlayers;
+  const canAddBot = isHost && state.phase === "lobby" && seated.length < state.maxPlayers;
   const roundOptions = ROUND_OPTIONS.includes(state.rounds)
     ? ROUND_OPTIONS
     : [...ROUND_OPTIONS, state.rounds].sort((a, b) => a - b);
@@ -94,6 +96,25 @@ export function RoomScreen({ room, onLeave }: Props) {
                 )}
                 <span className="muted">first to {winsNeeded(state.rounds)}</span>
               </label>
+              {isHost && (
+                <label className="rounds">
+                  Bot
+                  <select
+                    value={botDifficulty}
+                    onChange={(e) => setBotDifficulty(e.target.value as BotDifficulty)}
+                    disabled={!canAddBot}
+                  >
+                    {BOT_DIFFICULTIES.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                  <button disabled={!canAddBot} onClick={() => room.send("addBot", { difficulty: botDifficulty })}>
+                    Add bot
+                  </button>
+                </label>
+              )}
               <button onClick={() => room.send("ready", { ready: !me.ready })}>
                 {me.ready ? "Not ready" : "Ready"}
               </button>

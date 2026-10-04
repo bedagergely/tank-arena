@@ -29,7 +29,10 @@ pnpm dev            # server on :2567, client on :3000
 
 Open http://localhost:3000 in two tabs, create a room in one and join it from the
 other (by ID or from the open-rooms list). The host presses **Start**, or both
-players toggle **Ready**.
+players toggle **Ready**. Alone? The host can **Add bot** (easy / normal / hard) in
+the lobby; bots take a seat like any player and are driven entirely on the server
+(`packages/shared/src/engine/bot.ts`): they hunt direct and bank shots, predict and
+dodge incoming bullets, path around walls and go for loot boxes.
 
 | Action  | Keys                     |
 | ------- | ------------------------ |
