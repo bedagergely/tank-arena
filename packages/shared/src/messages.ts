@@ -1,3 +1,4 @@
+import type { BotDifficulty } from "./engine/bot.ts";
 import type { PlayerInput } from "./engine/types.ts";
 import type { PerkId } from "./rules.ts";
 
@@ -15,6 +16,10 @@ export interface ClientMessages {
   /** Host only, lobby only: number of rounds in the next match. */
   setRounds: { rounds: number };
   setName: { name: string };
+  /** Host only, lobby only: seat a server-controlled AI opponent (default difficulty when omitted). */
+  addBot: { difficulty?: BotDifficulty };
+  /** Host only, lobby only: `sessionId` is the bot's key in `state.players`. */
+  removeBot: { sessionId: string };
 }
 
 export interface ChatMessage {

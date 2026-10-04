@@ -1,9 +1,12 @@
 import { Room, type Client, type StepContext } from "colyseus";
 import {
   clampRounds,
+  createBot,
   createJsEngine,
+  DEFAULT_BOT_DIFFICULTY,
   DEFAULT_MAP_ID,
   getMap,
+  isBotDifficulty,
   MAX_CHAT_LENGTH,
   MAX_NAME_LENGTH,
   PERK_BULLET_SPEED,
@@ -11,9 +14,12 @@ import {
   PERK_NAMES,
   PERK_SHIELD,
   PERK_TANK_SPEED,
+  resetBot,
   resolveRules,
   sanitizeInput,
+  thinkBot,
   winsNeeded,
+  type BotState,
   type EngineFactory,
   type GameEngine,
   type GameRules,
@@ -50,6 +56,8 @@ interface ClientData {
 
 type GameClient = Client<{ messages: ServerMessages; userData: ClientData }>;
 
+const BOT_NAMES = ["Rusty", "Bolt", "Sprocket", "Gizmo", "Clank", "Piston", "Widget", "Turbo"];
+
 /**
  * One match lobby + arena. The room owns all game truth: clients only send
  * intents (input, chat, ready, start), the server simulates and broadcasts.
@@ -68,12 +76,15 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   private lastCountdownShown = -1;
   /** Seats taken when the match began; a match with fewer players left ends by forfeit. */
   private matchSeats = 0;
+  /** AI opponents keyed by their `state.players` id; they occupy seats but have no client. */
+  private bots = new Map<string, BotState>();
+  private botsCreated = 0;
 
   override messages = {
     input: (client: GameClient, payload: ClientMessages["input"]) => {
       if (this.state.phase !== "playing") return;
       const player = this.state.players.get(client.sessionId);
-      if (!player || player.slot < 0) return;
+      if (!player || player.slot < 0 || player.isBot) return;
       this.engine.setInput(player.slot, sanitizeInput(payload));
     },
 
@@ -121,6 +132,38 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       if (!player || !name) return;
       player.name = name;
     },
+
+    addBot: (client: GameClient, payload: ClientMessages["addBot"]) => {
+      if (client.sessionId !== this.state.hostSessionId) return;
+      if (this.state.phase !== "lobby") return;
+      const slot = this.nextFreeSlot();
+      if (slot < 0) {
+        client.send("system", { text: "No free seat for a bot.", at: Date.now() });
+        return;
+      }
+      const requested = isRecord(payload) ? payload.difficulty : undefined;
+      const difficulty = isBotDifficulty(requested) ? requested : DEFAULT_BOT_DIFFICULTY;
+      const id = `bot-${++this.botsCreated}`;
+      const name = `${BOT_NAMES[(this.botsCreated - 1) % BOT_NAMES.length]} (bot)`;
+      // Bots are always ready, so a lone human can start by toggling Ready.
+      this.state.players.set(id, new PlayerState({ sessionId: id, name, slot, ready: true, isBot: true, difficulty }));
+      this.bots.set(id, createBot(slot, difficulty, newSeed()));
+      this.updateMaxClients();
+      this.system(`${name} joined (${difficulty}).`);
+      this.tryAutoStart();
+    },
+
+    removeBot: (client: GameClient, payload: ClientMessages["removeBot"]) => {
+      if (client.sessionId !== this.state.hostSessionId) return;
+      if (this.state.phase !== "lobby") return;
+      const id = readText(payload, "sessionId", 32);
+      const player = id ? this.state.players.get(id) : undefined;
+      if (!id || !player || !this.bots.has(id)) return;
+      this.bots.delete(id);
+      this.state.players.delete(id);
+      this.updateMaxClients();
+      this.system(`${player.name} removed.`);
+    },
   };
 
   override onCreate(options: JoinOptions) {
@@ -166,8 +209,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     this.system(`${player.name} left.`);
 
     if (this.state.hostSessionId === client.sessionId) {
-      const next = this.state.players.keys().next();
-      this.state.hostSessionId = next.done ? "" : next.value;
+      const next = [...this.state.players.values()].find((p) => !p.isBot);
+      this.state.hostSessionId = next?.sessionId ?? "";
     }
 
     if ((this.state.phase === "playing" || this.state.phase === "countdown") && player.slot >= 0) {
@@ -242,6 +285,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       seated.map((p) => p.slot),
       newSeed(),
     );
+    for (const bot of this.bots.values()) resetBot(bot);
     this.syncWorld();
     this.state.round += 1;
     this.state.winnerSlot = -1;
@@ -272,6 +316,10 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   }
 
   private simulate(dt: number) {
+    // Bots decide from the same authoritative world the clients see, one input per tick.
+    for (const bot of this.bots.values()) {
+      this.engine.setInput(bot.slot, thinkBot(bot, this.engine.world, this.engine.map, this.rules, dt));
+    }
     const events = this.engine.step(dt);
     this.syncWorld();
     this.handleEvents(events);
@@ -352,7 +400,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     this.state.bullets.clear();
     this.state.loot.clear();
     for (const player of this.state.players.values()) {
-      player.ready = false;
+      player.ready = player.isBot;
       if (player.slot < 0) player.slot = this.nextFreeSlot();
     }
     this.setPhase("lobby");
@@ -424,6 +472,11 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
 
   private seatedPlayers(): PlayerState[] {
     return [...this.state.players.values()].filter((p) => p.slot >= 0).sort((a, b) => a.slot - b.slot);
+  }
+
+  /** Bots hold seats without a connection, so the client cap shrinks with each one. */
+  private updateMaxClients() {
+    this.maxClients = Math.max(1, this.rules.maxPlayers - this.bots.size);
   }
 
   private nextFreeSlot(): number {

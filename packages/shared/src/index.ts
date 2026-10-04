@@ -5,4 +5,5 @@ export * from "./engine/input.ts";
 export * from "./engine/physics.ts";
 export * from "./engine/simulation.ts";
 export * from "./engine/engine.ts";
+export * from "./engine/bot.ts";
 export * from "./messages.ts";

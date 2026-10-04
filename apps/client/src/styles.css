@@ -307,6 +307,15 @@ select:focus {
   background: #1f4d2a;
   color: #8fe3a0;
 }
+.tag.bot {
+  background: #3a2f5c;
+  color: #c9b8ff;
+}
+.players button.kick {
+  padding: 0 0.4rem;
+  line-height: 1.2;
+  font-size: 0.9rem;
+}
 .wins {
   color: var(--muted);
   font-size: 0.85rem;

@@ -167,7 +167,7 @@ function findHitTank(world: World, bullet: Bullet, bulletRadius: number, tankRad
   return undefined;
 }
 
-function maxBullets(tank: Tank, rules: GameRules): number {
+export function maxBullets(tank: Tank, rules: GameRules): number {
   return rules.bullet.maxPerTank + (tank.perks[PERK_BULLETS] > 0 ? rules.loot.extraBullets : 0);
 }
 
@@ -237,7 +237,7 @@ function nextRandom(world: World): number {
   return (s >>> 0) / 4294967296;
 }
 
-function countBullets(world: World, slot: number): number {
+export function countBullets(world: Readonly<World>, slot: number): number {
   let n = 0;
   for (const b of world.bullets) if (b.ownerSlot === slot) n++;
   return n;
