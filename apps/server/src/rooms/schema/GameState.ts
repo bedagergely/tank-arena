@@ -13,6 +13,7 @@ export const PlayerState = schema(
     slot: t.int8().default(-1),
     ready: t.boolean().default(false),
     connected: t.boolean().default(true),
+    /** Round wins in the current (or last) match. */
     wins: t.uint16().default(0),
   },
   "Player",
@@ -26,6 +27,11 @@ export const TankState = schema(
     y: t.float32(),
     angle: t.float32(),
     alive: t.boolean().default(true),
+    /** Seconds left on each perk (0 = inactive); see PERK_* ids in shared. */
+    perkBullets: t.float32().default(0),
+    perkBulletSpeed: t.float32().default(0),
+    perkTankSpeed: t.float32().default(0),
+    perkShield: t.float32().default(0),
   },
   "Tank",
 );
@@ -43,6 +49,17 @@ export const BulletState = schema(
 );
 export type BulletState = SchemaType<typeof BulletState>;
 
+export const LootState = schema(
+  {
+    id: t.uint32(),
+    x: t.float32(),
+    y: t.float32(),
+    perk: t.uint8(),
+  },
+  "Loot",
+);
+export type LootState = SchemaType<typeof LootState>;
+
 export const GameState = schema(
   {
     phase: t.string().default("lobby"),
@@ -55,14 +72,21 @@ export const GameState = schema(
     bulletRadius: t.float32().default(4),
     /** Whole seconds left in a timed phase (countdown / finished); 0 otherwise. */
     countdown: t.uint8().default(0),
+    /** Rounds in the match (best-of); host-adjustable in the lobby. */
+    rounds: t.uint8().default(5),
+    /** Current round number within the match, 0 before the first round. */
     round: t.uint16().default(0),
-    /** Slot of the last match's winner, -1 for none/draw. */
+    /** Slot of the last round's winner, -1 for none/draw. */
     winnerSlot: t.int8().default(-1),
+    /** Slot of the match winner once the match is decided, -1 otherwise (or a drawn match). */
+    matchWinnerSlot: t.int8().default(-1),
     players: t.map(PlayerState),
     /** Keyed by slot. */
     tanks: t.map(TankState),
     /** Keyed by bullet id. */
     bullets: t.map(BulletState),
+    /** Keyed by loot id. */
+    loot: t.map(LootState),
   },
   "GameState",
 );

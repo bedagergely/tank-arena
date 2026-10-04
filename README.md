@@ -5,7 +5,10 @@ Multiplayer browser tank game. Authoritative [Colyseus](https://colyseus.io) ser
 
 Two tanks drop into opposite corners of a walled arena. Each can have one bullet in
 flight; bullets bounce off walls and vanish after 5 bounces. First tank hit ends the
-round and everyone returns to the room lobby. Each room has an ephemeral chat.
+round. A match is best of N rounds (default 5, host-adjustable in the lobby) and ends
+as soon as someone holds the majority; then everyone returns to the room lobby. Loot
+boxes spawn around the map during a round and grant a 30 s perk: extra bullets, faster
+bullets, faster tank, or a shield that absorbs one hit. Each room has an ephemeral chat.
 
 ## Layout
 
@@ -78,18 +81,20 @@ Clients send only intents, and every payload is treated as untrusted:
 | `chat`    | `{ text }`                                | Trimmed, length-capped, rate-limited, broadcast; never stored |
 | `ready`   | `{ ready }`                               | Lobby only, seated players only                  |
 | `start`   | `{}`                                      | Host only, lobby only, needs `minPlayers`        |
+| `setRounds` | `{ rounds }`                            | Host only, lobby only, clamped to `match.min/maxRounds` |
 | `setName` | `{ name }`                                | Sanitised                                        |
 
 The server runs the simulation at a fixed tick (30 Hz), decides collisions, cooldowns,
-bullet counts, bounces, deaths and the win condition, and syncs the resulting world
-through Colyseus schema state. Fire/bounce/hit are also broadcast as events so the
-client can play effects. Clients exceeding 60 messages/s are dropped by Colyseus.
+bullet counts, bounces, deaths, the win condition, loot spawning (from a per-round
+server seed), pickups and perk timers, and syncs the resulting world through Colyseus
+schema state. Fire/bounce/hit/shield-block/loot events are also broadcast so the client
+can play effects. Clients exceeding 60 messages/s are dropped by Colyseus.
 
 ### Configurable rules, maps, player counts
 
 `packages/shared/src/rules.ts` defines `GameRules` (player counts, tick rate, tank and
-bullet parameters, bounce limit, win condition) with `DEFAULT_RULES` and
-`resolveRules(overrides)`. Maps are `MapSource` modules in
+bullet parameters, bounce limit, win condition, `match` round limits, `loot` spawn
+cadence / perk magnitudes / duration) with `DEFAULT_RULES` and `resolveRules(overrides)`. Maps are `MapSource` modules in
 `packages/shared/src/maps/data/` (world size, wall rectangles of any size, ordered
 spawn points) compiled by `compileMap`; `asciiMap` converts the old `#`/`.`/`1`-`9`
 grid notation into the same format. Register a room variant with different rules or

@@ -215,6 +215,59 @@ select:focus {
   font-size: 5rem;
   line-height: 1;
 }
+.scoreboard {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(6, 8, 12, 0.6);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+.scoreboard .score {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.perks {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+.perk {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(6, 8, 12, 0.7);
+  border: 1px solid;
+}
+.perk-0 {
+  color: #ffb74d;
+}
+.perk-1 {
+  color: #ff5252;
+}
+.perk-2 {
+  color: #69f0ae;
+}
+.perk-3 {
+  color: #40c4ff;
+}
+.rounds {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
 
 .players ul,
 .chat-feed {

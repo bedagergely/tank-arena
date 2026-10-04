@@ -2,14 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   asciiMap,
   circleHitsWall,
+  clampRounds,
   compileMap,
   createJsEngine,
   DEFAULT_RULES,
   getMap,
   listMaps,
+  PERK_BULLET_SPEED,
+  PERK_BULLETS,
+  PERK_SHIELD,
+  PERK_TANK_SPEED,
   resolveRules,
   sanitizeInput,
   validateMapSource,
+  winsNeeded,
+  type PerkId,
   type PlayerInput,
   type TickEvent,
 } from "../src/index.ts";
@@ -172,14 +179,141 @@ describe("simulation", () => {
     expect(engine.world.bullets.length).toBe(0);
   });
 
-  it("is deterministic for identical inputs", () => {
+  it("is deterministic for identical inputs and seed", () => {
     const a = createJsEngine(corridor, DEFAULT_RULES);
     const b = createJsEngine(corridor, DEFAULT_RULES);
-    a.reset([0, 1]);
-    b.reset([0, 1]);
+    a.reset([0, 1], 12345);
+    b.reset([0, 1], 12345);
     const inputs = { 0: { throttle: 1, turn: 1, fire: true } as PlayerInput, 1: { throttle: -1, turn: -1, fire: true } as PlayerInput };
-    run(a, 2, inputs);
-    run(b, 2, inputs);
+    run(a, 20, inputs);
+    run(b, 20, inputs);
     expect(a.world).toEqual(b.world);
+    expect(a.world.nextLootId).toBeGreaterThan(1);
+  });
+});
+
+describe("match rules", () => {
+  it("needs a majority of rounds", () => {
+    expect(winsNeeded(5)).toBe(3);
+    expect(winsNeeded(1)).toBe(1);
+    expect(winsNeeded(4)).toBe(3);
+    expect(winsNeeded(7)).toBe(4);
+  });
+
+  it("clamps host-provided round counts", () => {
+    expect(clampRounds(5, DEFAULT_RULES)).toBe(5);
+    expect(clampRounds(0, DEFAULT_RULES)).toBe(DEFAULT_RULES.match.minRounds);
+    expect(clampRounds(999, DEFAULT_RULES)).toBe(DEFAULT_RULES.match.maxRounds);
+    expect(clampRounds(3.6, DEFAULT_RULES)).toBe(4);
+    expect(clampRounds("5", DEFAULT_RULES)).toBeUndefined();
+    expect(clampRounds(NaN, DEFAULT_RULES)).toBeUndefined();
+  });
+});
+
+describe("loot boxes", () => {
+  /** Open 12x8 room: plenty of free space for boxes. */
+  const room = compileMap(
+    asciiMap({
+      id: "room",
+      name: "Room",
+      tileSize: TILE,
+      rows: [
+        "############",
+        "#1.........#",
+        "#..........#",
+        "#..........#",
+        "#..........#",
+        "#..........#",
+        "#.........2#",
+        "############",
+      ],
+    }),
+  );
+
+  it("spawn on free floor, away from tanks, up to maxOnMap", () => {
+    const rules = resolveRules({ loot: { firstSpawnSeconds: 1, spawnIntervalSeconds: 1, maxOnMap: 2 } });
+    const engine = createJsEngine(room, rules);
+    engine.reset([0, 1], 7);
+    const events = run(engine, 20);
+    const spawns = events.filter((e) => e.type === "loot-spawn");
+    expect(spawns.length).toBe(2);
+    expect(engine.world.loot.length).toBe(2);
+    for (const box of engine.world.loot) {
+      expect(circleHitsWall(room, box.x, box.y, rules.loot.radius + rules.tank.radius)).toBe(false);
+      for (const t of engine.world.tanks) expect(Math.hypot(t.x - box.x, t.y - box.y)).toBeGreaterThan(rules.tank.radius * 4);
+    }
+  });
+
+  it("does not spawn when disabled", () => {
+    const engine = createJsEngine(room, resolveRules({ loot: { enabled: false } }));
+    engine.reset([0, 1], 7);
+    run(engine, 30);
+    expect(engine.world.loot.length).toBe(0);
+  });
+
+  function pickUp(perk: PerkId) {
+    const rules = DEFAULT_RULES;
+    const engine = createJsEngine(room, rules);
+    engine.reset([0, 1], 7);
+    // Drop a box right in front of tank 0 and drive over it.
+    const tank = engine.world.tanks[0]!;
+    tank.angle = 0;
+    engine.world.loot.push({ id: 99, x: tank.x + 40, y: tank.y, perk });
+    const events = run(engine, 1, { 0: { throttle: 1, turn: 0, fire: false } });
+    expect(events).toContainEqual({ type: "loot-pickup", lootId: 99, slot: 0, perk });
+    expect(engine.world.loot.some((b) => b.id === 99)).toBe(false);
+    return { engine, rules, tank: engine.world.tanks[0]! };
+  }
+
+  it("a perk lasts for the configured duration and then expires", () => {
+    const { engine, rules, tank } = pickUp(PERK_TANK_SPEED);
+    expect(tank.perks[PERK_TANK_SPEED]).toBeGreaterThan(rules.loot.durationSeconds - 1);
+    expect(tank.perks[PERK_TANK_SPEED]).toBeLessThanOrEqual(rules.loot.durationSeconds);
+    run(engine, rules.loot.durationSeconds + 0.1);
+    expect(tank.perks[PERK_TANK_SPEED]).toBe(0);
+  });
+
+  it("tank speed perk moves the tank faster", () => {
+    const boosted = pickUp(PERK_TANK_SPEED);
+    const plain = createJsEngine(room, boosted.rules);
+    plain.reset([0, 1], 7);
+    plain.world.tanks[0]!.angle = 0;
+    // Both drive for the same time from the same x after the pickup second.
+    const startBoosted = boosted.tank.x;
+    const startPlain = plain.world.tanks[0]!.x;
+    run(boosted.engine, 0.5, { 0: { throttle: 1, turn: 0, fire: false } });
+    run(plain, 0.5, { 0: { throttle: 1, turn: 0, fire: false } });
+    const dBoosted = boosted.tank.x - startBoosted;
+    const dPlain = plain.world.tanks[0]!.x - startPlain;
+    expect(dBoosted / dPlain).toBeCloseTo(boosted.rules.loot.tankSpeedMultiplier, 1);
+  });
+
+  it("extra bullets perk raises the in-flight limit", () => {
+    const { engine, rules } = pickUp(PERK_BULLETS);
+    engine.world.tanks[0]!.angle = 0; // long free flight along the row
+    const events = run(engine, 1, { 0: FIRE });
+    expect(events.filter((e) => e.type === "fire").length).toBe(rules.bullet.maxPerTank + rules.loot.extraBullets);
+  });
+
+  it("bullet speed perk fires faster bullets", () => {
+    const { engine, rules } = pickUp(PERK_BULLET_SPEED);
+    engine.world.tanks[0]!.angle = 0;
+    run(engine, 1 / rules.tickRate, { 0: FIRE });
+    const bullet = engine.world.bullets[0]!;
+    expect(Math.hypot(bullet.vx, bullet.vy)).toBeCloseTo(rules.bullet.speed * rules.loot.bulletSpeedMultiplier);
+  });
+
+  it("shield absorbs exactly one hit", () => {
+    const { engine, tank } = pickUp(PERK_SHIELD);
+    tank.angle = Math.PI / 2; // fire into the far wall so the bullet bounces straight back
+    const first = run(engine, 2, { 0: FIRE });
+    expect(first.find((e) => e.type === "shield-block")).toMatchObject({ shooterSlot: 0, targetSlot: 0 });
+    expect(first.some((e) => e.type === "hit")).toBe(false);
+    expect(tank.alive).toBe(true);
+    expect(tank.perks[PERK_SHIELD]).toBe(0);
+
+    const second = run(engine, 2, { 0: FIRE });
+    expect(second.some((e) => e.type === "hit")).toBe(true);
+    expect(tank.alive).toBe(false);
   });
 });

@@ -118,19 +118,23 @@ describe("GameRoom", () => {
 
   it("ends the round on the first hit and returns to the lobby", async () => {
     const { room, host, guest } = await createDuel();
+    expect(room.state.rounds).toBe(5);
     host.send("start", {});
     await room.waitForMessage("start");
+    expect(room.state.round).toBe(1);
     await waitFor(() => room.state.phase === "playing");
 
-    // A player leaving mid-match forfeits: the remaining tank wins.
+    // A player leaving mid-match forfeits: the remaining tank wins the round and the match.
     await guest.leave();
-    await waitFor(() => room.state.phase === "finished");
+    await waitFor(() => room.state.phase === "match-over");
     expect(room.state.winnerSlot).toBe(0);
+    expect(room.state.matchWinnerSlot).toBe(0);
     expect(room.state.players.get(host.sessionId)?.wins).toBe(1);
 
     await waitFor(() => room.state.phase === "lobby", 8000);
     expect(room.state.tanks.size).toBe(0);
     expect(room.state.bullets.size).toBe(0);
+    expect(room.state.loot.size).toBe(0);
   }, 15000);
 
   it("relays chat instantly without storing it", async () => {
