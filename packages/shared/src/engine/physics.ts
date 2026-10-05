@@ -28,23 +28,33 @@ export interface MoveResult {
  * Move a circle by (dx, dy), resolving each axis independently so the body
  * slides along walls instead of sticking. Reports which axes were blocked so the
  * caller can reflect velocity (bullets) or simply stop (tanks).
+ *
+ * The move is split into sub-steps no longer than the circle's diameter, so a
+ * fast body cannot pass through a wall thinner than one step.
  */
 export function moveCircle(map: GameMap, x: number, y: number, r: number, dx: number, dy: number): MoveResult {
-  let nx = x + dx;
+  const maxStep = r > 0 ? 2 * r : 1;
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / maxStep));
+  const sx = dx / steps;
+  const sy = dy / steps;
   let hitX = false;
-  if (dx !== 0 && circleHitsWall(map, nx, y, r)) {
-    nx = x;
-    hitX = true;
-  }
-
-  let ny = y + dy;
   let hitY = false;
-  if (dy !== 0 && circleHitsWall(map, nx, ny, r)) {
-    ny = y;
-    hitY = true;
+
+  for (let i = 0; i < steps; i++) {
+    if (!hitX && sx !== 0) {
+      const nx = x + sx;
+      if (circleHitsWall(map, nx, y, r)) hitX = true;
+      else x = nx;
+    }
+    if (!hitY && sy !== 0) {
+      const ny = y + sy;
+      if (circleHitsWall(map, x, ny, r)) hitY = true;
+      else y = ny;
+    }
+    if (hitX && hitY) break;
   }
 
-  return { x: nx, y: ny, hitX, hitY };
+  return { x, y, hitX, hitY };
 }
 
 export function circlesOverlap(ax: number, ay: number, ar: number, bx: number, by: number, br: number): boolean {

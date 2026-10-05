@@ -1,3 +1,5 @@
+import { isBorderClosed, layoutWalls, parseLayout, tileCenter, unreachableCells } from "./layout.ts";
+
 /** Axis-aligned rectangle in world units (pixels). */
 export interface Rect {
   x: number;
@@ -14,17 +16,26 @@ export interface SpawnPoint {
 }
 
 /**
- * Author-facing map description: a world size, solid wall rectangles of any
- * size, and ordered spawn points. Spawns without an explicit angle face the
- * centre of the map. This is the format the map editor reads and writes.
+ * Author-facing map description: a grid of square tiles whose walls sit on the
+ * tile borders, drawn as a picture (see `parseLayout`):
+ *
+ *     +-+-+-+
+ *     |1  | |
+ *     + + + +
+ *     |   |2|
+ *     +-+-+-+
+ *
+ * Spawn digits order the player slots; tanks face the map centre. This is the
+ * format the map editor reads and writes.
  */
 export interface MapSource {
   id: string;
   name: string;
-  width: number;
-  height: number;
-  walls: Rect[];
-  spawns: { x: number; y: number; angle?: number }[];
+  /** Tile edge length in world units; must comfortably fit a tank. */
+  tileSize: number;
+  /** Wall thickness in world units. */
+  wallThickness: number;
+  layout: string[];
 }
 
 /**
@@ -36,15 +47,21 @@ export interface GameMap {
   name: string;
   width: number;
   height: number;
+  tileSize: number;
+  wallThickness: number;
+  cols: number;
+  rows: number;
   walls: readonly Rect[];
   spawns: readonly SpawnPoint[];
 }
 
 export const MAP_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+export const DEFAULT_TILE_SIZE = 64;
+export const DEFAULT_WALL_THICKNESS = 4;
 
 /**
  * Returns human-readable problems with a map source (empty when valid).
- * `clearance` is the radius that must stay free around each spawn point.
+ * `clearance` is the tank radius: every tile must have room for one.
  */
 export function validateMapSource(source: MapSource, clearance = 0): string[] {
   const errors: string[] = [];
@@ -52,31 +69,23 @@ export function validateMapSource(source: MapSource, clearance = 0): string[] {
     errors.push(`id must match ${MAP_ID_PATTERN} (got "${source.id}")`);
   }
   if (source.name.trim().length === 0) errors.push("name is empty");
-  if (!isPositive(source.width) || !isPositive(source.height)) {
-    errors.push("width and height must be positive numbers");
+  if (!isPositive(source.tileSize) || !isPositive(source.wallThickness)) {
+    errors.push("tileSize and wallThickness must be positive numbers");
+  } else if (source.tileSize - source.wallThickness <= 2 * clearance) {
+    errors.push(`tiles must be wider than ${2 * clearance + source.wallThickness} to fit a tank`);
   }
-  source.walls.forEach((w, i) => {
-    if (!Number.isFinite(w.x) || !Number.isFinite(w.y) || !isPositive(w.width) || !isPositive(w.height)) {
-      errors.push(`wall ${i} has invalid geometry`);
-    } else if (w.x < 0 || w.y < 0 || w.x + w.width > source.width || w.y + w.height > source.height) {
-      errors.push(`wall ${i} is outside the map`);
-    }
-  });
-  if (source.spawns.length < 2) errors.push("at least 2 spawn points are required");
-  source.spawns.forEach((s, i) => {
-    if (!Number.isFinite(s.x) || !Number.isFinite(s.y)) {
-      errors.push(`spawn ${i + 1} has invalid coordinates`);
-    } else if (
-      s.x - clearance < 0 ||
-      s.y - clearance < 0 ||
-      s.x + clearance > source.width ||
-      s.y + clearance > source.height
-    ) {
-      errors.push(`spawn ${i + 1} is outside the map`);
-    } else if (source.walls.some((w) => circleOverlapsRect(s.x, s.y, clearance, w))) {
-      errors.push(`spawn ${i + 1} is inside a wall`);
-    }
-  });
+
+  let grid;
+  try {
+    grid = parseLayout(source.layout);
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : String(err));
+    return errors;
+  }
+  if (!isBorderClosed(grid)) errors.push("the outer border must be closed");
+  if (grid.spawns.length < 2) errors.push("at least 2 spawn points are required");
+  const unreachable = unreachableCells(grid);
+  if (unreachable > 0) errors.push(`${unreachable} tile(s) cannot be reached from spawn 1`);
   return errors;
 }
 
@@ -85,33 +94,26 @@ export function compileMap(source: MapSource): GameMap {
   if (errors.length > 0) {
     throw new Error(`Map "${source.id}": ${errors.join("; ")}`);
   }
-  const cx = source.width / 2;
-  const cy = source.height / 2;
+  const grid = parseLayout(source.layout);
+  const ts = source.tileSize;
+  const t = source.wallThickness;
+  const width = grid.cols * ts + t;
+  const height = grid.rows * ts + t;
   return {
     id: source.id,
     name: source.name,
-    width: source.width,
-    height: source.height,
-    walls: source.walls.map((w) => ({ x: w.x, y: w.y, width: w.width, height: w.height })),
-    spawns: source.spawns.map((s) => ({
-      x: s.x,
-      y: s.y,
-      angle: s.angle ?? Math.atan2(cy - s.y, cx - s.x),
-    })),
+    width,
+    height,
+    tileSize: ts,
+    wallThickness: t,
+    cols: grid.cols,
+    rows: grid.rows,
+    walls: layoutWalls(grid, ts, t),
+    spawns: grid.spawns.map((s) => {
+      const { x, y } = tileCenter(ts, t, s.col, s.row);
+      return { x, y, angle: Math.atan2(height / 2 - y, width / 2 - x) };
+    }),
   };
-}
-
-export function pointInRect(x: number, y: number, r: Rect): boolean {
-  return x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
-}
-
-/** True when a circle at (x, y) with radius r overlaps the rectangle (touching edges do not count). */
-export function circleOverlapsRect(x: number, y: number, r: number, rect: Rect): boolean {
-  const cx = Math.min(Math.max(x, rect.x), rect.x + rect.width);
-  const cy = Math.min(Math.max(y, rect.y), rect.y + rect.height);
-  const dx = x - cx;
-  const dy = y - cy;
-  return dx * dx + dy * dy < r * r || (r === 0 && pointInRect(x, y, rect));
 }
 
 function isPositive(n: number): boolean {

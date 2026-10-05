@@ -126,8 +126,8 @@ export class GameRenderer {
     for (const w of this.map.walls) {
       g.rect(w.x, w.y, w.width, w.height).fill(WALL);
       // Light top/left edge for a bit of depth.
-      g.rect(w.x, w.y, w.width, Math.min(2, w.height)).fill(WALL_EDGE);
-      g.rect(w.x, w.y, Math.min(2, w.width), w.height).fill(WALL_EDGE);
+      g.rect(w.x, w.y, w.width, Math.min(1, w.height)).fill(WALL_EDGE);
+      g.rect(w.x, w.y, Math.min(1, w.width), w.height).fill(WALL_EDGE);
     }
     return g;
   }
