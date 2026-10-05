@@ -2,12 +2,12 @@ import { MAP_SOURCES } from "./data/index.ts";
 import { compileMap, type GameMap, type MapSource } from "./types.ts";
 
 export * from "./types.ts";
-export * from "./ascii.ts";
+export * from "./layout.ts";
 
 const SOURCES: ReadonlyMap<string, MapSource> = new Map(MAP_SOURCES.map((s) => [s.id, s]));
 const REGISTRY: ReadonlyMap<string, GameMap> = new Map(MAP_SOURCES.map((s) => [s.id, compileMap(s)]));
 
-export const DEFAULT_MAP_ID = REGISTRY.has("arena") ? "arena" : (MAP_SOURCES[0]?.id ?? "");
+export const DEFAULT_MAP_ID = REGISTRY.has("labyrinth") ? "labyrinth" : (MAP_SOURCES[0]?.id ?? "");
 
 export function getMap(id: string): GameMap | undefined {
   return REGISTRY.get(id);

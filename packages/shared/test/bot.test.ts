@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  asciiMap,
   compileMap,
   createBot,
   createJsEngine,
@@ -22,33 +21,43 @@ const FIRE: PlayerInput = { throttle: 0, turn: 0, fire: true };
 
 const rules = { ...DEFAULT_RULES, loot: { ...DEFAULT_RULES.loot, enabled: false } };
 
-/** 10x5 corridor, tanks at both ends facing each other. */
-const corridor = compileMap(
-  asciiMap({
-    id: "corridor",
-    name: "Corridor",
-    tileSize: TILE,
-    rows: ["##########", "#........#", "#1......2#", "#........#", "##########"],
-  }),
-);
+/** 8x3 open corridor, tanks at both ends of the middle row facing each other. */
+const corridor = compileMap({
+  id: "corridor",
+  name: "Corridor",
+  tileSize: TILE,
+  wallThickness: 4,
+  layout: [
+    "+-+-+-+-+-+-+-+-+",
+    "|               |",
+    "+ + + + + + + + +",
+    "|1             2|",
+    "+ + + + + + + + +",
+    "|               |",
+    "+-+-+-+-+-+-+-+-+",
+  ],
+});
 
-/** A full-height wall with a gap at the bottom separates the tanks: no direct shot. */
-const detour = compileMap(
-  asciiMap({
-    id: "detour",
-    name: "Detour",
-    tileSize: TILE,
-    rows: [
-      "############",
-      "#....#.....#",
-      "#1...#....2#",
-      "#....#.....#",
-      "#....#.....#",
-      "#..........#",
-      "############",
-    ],
-  }),
-);
+/** A wall down the middle with a gap at the bottom separates the tanks: no direct shot. */
+const detour = compileMap({
+  id: "detour",
+  name: "Detour",
+  tileSize: TILE,
+  wallThickness: 4,
+  layout: [
+    "+-+-+-+-+-+-+-+-+-+-+",
+    "|         |         |",
+    "+ + + + + + + + + + +",
+    "|1        |        2|",
+    "+ + + + + + + + + + +",
+    "|         |         |",
+    "+ + + + + + + + + + +",
+    "|         |         |",
+    "+ + + + + + + + + + +",
+    "|                   |",
+    "+-+-+-+-+-+-+-+-+-+-+",
+  ],
+});
 
 /**
  * Run `seconds` of play with a bot in slot 0 and a scripted opponent in slot 1.
