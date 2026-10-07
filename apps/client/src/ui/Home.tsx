@@ -43,75 +43,100 @@ export function Home({ onJoin, busy, error }: Props) {
   }
 
   return (
-    <main className="home">
-      <h1>Tank Arena</h1>
-      <p className="tagline">Two tanks. One bullet each. Five bounces. Don&apos;t get hit.</p>
+    <main className="mx-auto w-full max-w-3xl px-6 py-12">
+      <h1 className="text-4xl font-semibold tracking-tight">Tank Arena</h1>
+      <p className="mt-1 text-base-content/60">Two tanks. One bullet each. Five bounces. Don&apos;t get hit.</p>
 
-      <label className="field">
-        <span>Your name</span>
+      <fieldset className="fieldset mt-6 max-w-xs">
+        <legend className="fieldset-legend">Your name</legend>
         <input
+          className="input w-full"
           value={name}
           maxLength={MAX_NAME_LENGTH}
           placeholder="Anonymous"
           onChange={(e) => setName(e.target.value)}
           disabled={busy}
         />
-      </label>
+      </fieldset>
 
-      <div className="home-columns">
-        <form className="card" onSubmit={onCreate}>
-          <h2>Create a room</h2>
-          <label className="field">
-            <span>Map</span>
-            <select value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
-              {listMaps().map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" disabled={busy}>
-            Create room
-          </button>
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <form className="card border border-base-300 bg-base-200" onSubmit={onCreate}>
+          <div className="card-body gap-3">
+            <h2 className="card-title text-lg">Create a room</h2>
+            <fieldset className="fieldset">
+              <legend className="fieldset-legend">Map</legend>
+              <select className="select w-full" value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
+                {listMaps().map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </fieldset>
+            <div className="card-actions justify-end">
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                Create room
+              </button>
+            </div>
+          </div>
         </form>
 
-        <form className="card" onSubmit={onJoinById}>
-          <h2>Join a room</h2>
-          <label className="field">
-            <span>Room ID</span>
-            <input
-              value={roomId}
-              placeholder="e.g. Ab3dEfGh1"
-              onChange={(e) => setRoomId(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <button type="submit" disabled={busy || !roomId.trim()}>
-            Join by ID
-          </button>
+        <form className="card border border-base-300 bg-base-200" onSubmit={onJoinById}>
+          <div className="card-body gap-3">
+            <h2 className="card-title text-lg">Join a room</h2>
+            <fieldset className="fieldset">
+              <legend className="fieldset-legend">Room ID</legend>
+              <input
+                className="input w-full font-mono"
+                value={roomId}
+                placeholder="e.g. Ab3dEfGh1"
+                onChange={(e) => setRoomId(e.target.value)}
+                disabled={busy}
+              />
+            </fieldset>
+            <div className="card-actions justify-end">
+              <button type="submit" className="btn" disabled={busy || !roomId.trim()}>
+                Join by ID
+              </button>
+            </div>
 
-          <h3>Open rooms</h3>
-          {listError && <p className="error">{listError}</p>}
-          {rooms.length === 0 && !listError && <p className="muted">No open rooms yet — create one!</p>}
-          <ul className="room-list">
-            {rooms.map((r) => (
-              <li key={r.roomId}>
-                <span className="mono">{r.roomId}</span>
-                <span className="muted">
-                  {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
-                </span>
-                <button type="button" disabled={busy} onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}>
-                  Join
-                </button>
-              </li>
-            ))}
-          </ul>
+            <div className="divider my-0 text-xs tracking-wide text-base-content/60 uppercase">Open rooms</div>
+            {listError && <p className="text-sm text-error">{listError}</p>}
+            {rooms.length === 0 && !listError && (
+              <p className="text-sm text-base-content/60">No open rooms yet — create one!</p>
+            )}
+            <ul className="list">
+              {rooms.map((r) => (
+                <li key={r.roomId} className="list-row items-center gap-3 p-2">
+                  <span className="font-mono text-sm">{r.roomId}</span>
+                  <span className="text-sm text-base-content/60">
+                    {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={busy}
+                    onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}
+                  >
+                    Join
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </form>
       </div>
 
-      {error && <p className="error">{error.message || "Could not connect to the server."}</p>}
-      <p className="muted help">Move: W/S or ↑/↓ · Turn: A/D or ←/→ · Fire: Space</p>
+      {error && (
+        <div role="alert" className="alert alert-error mt-5">
+          <span>{error.message || "Could not connect to the server."}</span>
+        </div>
+      )}
+      <p className="mt-8 text-sm text-base-content/60">
+        Move: <kbd className="kbd kbd-sm">W</kbd>/<kbd className="kbd kbd-sm">S</kbd> or <kbd className="kbd kbd-sm">↑</kbd>/
+        <kbd className="kbd kbd-sm">↓</kbd> · Turn: <kbd className="kbd kbd-sm">A</kbd>/<kbd className="kbd kbd-sm">D</kbd> or{" "}
+        <kbd className="kbd kbd-sm">←</kbd>/<kbd className="kbd kbd-sm">→</kbd> · Fire: <kbd className="kbd kbd-sm">Space</kbd>
+      </p>
     </main>
   );
 }

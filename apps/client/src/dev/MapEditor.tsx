@@ -308,93 +308,142 @@ export function MapEditor() {
   for (let k = 0; k <= Math.max(grid.cols, grid.rows); k++) gridLines.push(k);
 
   return (
-    <div className="editor">
-      <aside className="editor-panel">
-        <h2>Map editor</h2>
-        <p className="muted">
-          Dev only. Saving writes <span className="mono">packages/shared/src/maps/data/{map.id}.ts</span>.
+    <div className="grid h-screen grid-cols-[340px_1fr]">
+      <aside className="overflow-x-hidden overflow-y-auto break-words border-r border-base-300 bg-base-200 px-5 py-4 text-sm">
+        <h2 className="text-xl font-semibold">Map editor</h2>
+        <p className="text-base-content/60">
+          Dev only. Saving writes <span className="font-mono">packages/shared/src/maps/data/{map.id}.ts</span>.
         </p>
 
-        <section>
-          <h3>Map</h3>
-          <label className="field">
-            Name
-            <input value={map.name} onChange={(e) => commit({ ...map, name: e.target.value })} />
+        <section className="border-t border-base-300 py-3">
+          <h3 className="mb-2 text-sm font-semibold">Map</h3>
+          <label className="mb-2 flex flex-col gap-1">
+            <span className="text-xs text-base-content/60">Name</span>
+            <input className="input input-sm w-full" value={map.name} onChange={(e) => commit({ ...map, name: e.target.value })} />
           </label>
-          <label className="field">
-            Id <span className="muted">(file name; a-z, 0-9, -)</span>
+          <label className="mb-2 flex flex-col gap-1">
+            <span className="text-xs text-base-content/60">
+              Id <span className="text-base-content/40">(file name; a-z, 0-9, -)</span>
+            </span>
             <input
-              className="mono"
+              className="input input-sm w-full font-mono"
               value={map.id}
               onChange={(e) => commit({ ...map, id: e.target.value })}
               onBlur={() => commit({ ...map, id: slugify(map.id) })}
             />
           </label>
-          <div className="editor-row">
-            <label className="field">
-              Columns
-              <input type="number" min={MIN_TILES} max={MAX_TILES} value={grid.cols} onChange={(e) => setSize(Number(e.target.value), grid.rows)} />
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Columns</span>
+              <input
+                className="input input-sm w-full"
+                type="number"
+                min={MIN_TILES}
+                max={MAX_TILES}
+                value={grid.cols}
+                onChange={(e) => setSize(Number(e.target.value), grid.rows)}
+              />
             </label>
-            <label className="field">
-              Rows
-              <input type="number" min={MIN_TILES} max={MAX_TILES} value={grid.rows} onChange={(e) => setSize(grid.cols, Number(e.target.value))} />
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Rows</span>
+              <input
+                className="input input-sm w-full"
+                type="number"
+                min={MIN_TILES}
+                max={MAX_TILES}
+                value={grid.rows}
+                onChange={(e) => setSize(grid.cols, Number(e.target.value))}
+              />
             </label>
           </div>
-          <div className="editor-row">
-            <label className="field">
-              Tile size
-              <input type="number" min={2 * TANK_RADIUS + 2} step={4} value={ts} onChange={(e) => commit({ ...map, tileSize: Number(e.target.value) })} />
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Tile size</span>
+              <input
+                className="input input-sm w-full"
+                type="number"
+                min={2 * TANK_RADIUS + 2}
+                step={4}
+                value={ts}
+                onChange={(e) => commit({ ...map, tileSize: Number(e.target.value) })}
+              />
             </label>
-            <label className="field">
-              Wall thickness
-              <input type="number" min={1} value={t} onChange={(e) => commit({ ...map, wallThickness: Number(e.target.value) })} />
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Wall thickness</span>
+              <input
+                className="input input-sm w-full"
+                type="number"
+                min={1}
+                value={t}
+                onChange={(e) => commit({ ...map, wallThickness: Number(e.target.value) })}
+              />
             </label>
           </div>
         </section>
 
-        <section>
-          <h3>Tools</h3>
-          <div className="editor-row">
-            <button className={tool === "wall" ? "primary" : ""} onClick={() => setTool("wall")} title="Click a tile border to toggle a wall, drag to paint (W)">
+        <section className="border-t border-base-300 py-3">
+          <h3 className="mb-2 text-sm font-semibold">Tools</h3>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <button
+              className={`btn btn-sm ${tool === "wall" ? "btn-primary" : ""}`}
+              onClick={() => setTool("wall")}
+              title="Click a tile border to toggle a wall, drag to paint (W)"
+            >
               Wall
             </button>
-            <button className={tool === "spawn" ? "primary" : ""} onClick={() => setTool("spawn")} title="Click a tile to add or remove a spawn (S)">
+            <button
+              className={`btn btn-sm ${tool === "spawn" ? "btn-primary" : ""}`}
+              onClick={() => setTool("spawn")}
+              title="Click a tile to add or remove a spawn (S)"
+            >
               Spawn
             </button>
-            <button onClick={undo} disabled={past.length === 0}>
+            <button className="btn btn-sm" onClick={undo} disabled={past.length === 0}>
               Undo
             </button>
-            <button onClick={redo} disabled={future.length === 0}>
+            <button className="btn btn-sm" onClick={redo} disabled={future.length === 0}>
               Redo
             </button>
           </div>
-          <div className="editor-row">
-            <button onClick={clearWalls}>Clear walls</button>
-            <button onClick={() => updateGrid((g) => ({ ...g, spawns: cornerSpawns(g) }))}>Corner spawns</button>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <button className="btn btn-sm" onClick={clearWalls}>
+              Clear walls
+            </button>
+            <button className="btn btn-sm" onClick={() => updateGrid((g) => ({ ...g, spawns: cornerSpawns(g) }))}>
+              Corner spawns
+            </button>
           </div>
-          <p className="muted help">
+          <p className="text-xs text-base-content/60">
             Walls sit on tile borders only; the outer border is always closed. Spawns are numbered in player-slot order
             (max {MAX_SPAWNS}) and face the map centre. Ctrl+Z / Ctrl+Shift+Z undo / redo.
           </p>
         </section>
 
-        <section>
-          <h3>Maze generator</h3>
-          <div className="editor-row">
-            <label className="field">
-              Seed
-              <input type="number" value={seed} onChange={(e) => setSeed(Number(e.target.value))} />
+        <section className="border-t border-base-300 py-3">
+          <h3 className="mb-2 text-sm font-semibold">Maze generator</h3>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Seed</span>
+              <input className="input input-sm w-full" type="number" value={seed} onChange={(e) => setSeed(Number(e.target.value))} />
             </label>
-            <label className="field">
-              Loops %
-              <input type="number" min={0} max={100} value={loops} onChange={(e) => setLoops(Number(e.target.value))} />
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-xs text-base-content/60">Loops %</span>
+              <input
+                className="input input-sm w-full"
+                type="number"
+                min={0}
+                max={100}
+                value={loops}
+                onChange={(e) => setLoops(Number(e.target.value))}
+              />
             </label>
           </div>
-          <div className="editor-row">
-            <button className="primary" onClick={makeMaze}>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <button className="btn btn-primary btn-sm" onClick={makeMaze}>
               Generate maze
             </button>
             <button
+              className="btn btn-sm"
               onClick={() => {
                 setSeed(Math.floor(Math.random() * 100000));
               }}
@@ -402,36 +451,45 @@ export function MapEditor() {
               Random seed
             </button>
           </div>
-          <p className="muted help">Replaces all inner walls with a random labyrinth of the current size; spawns are kept. Higher loop % opens more shortcuts.</p>
+          <p className="text-xs text-base-content/60">
+            Replaces all inner walls with a random labyrinth of the current size; spawns are kept. Higher loop % opens more
+            shortcuts.
+          </p>
         </section>
 
-        <section>
-          <h3>Save</h3>
+        <section className="border-t border-base-300 py-3">
+          <h3 className="mb-2 text-sm font-semibold">Save</h3>
           {errors.length > 0 && (
-            <ul className="error editor-errors">
-              {errors.map((e) => (
-                <li key={e}>{e}</li>
-              ))}
-            </ul>
+            <div role="alert" className="alert alert-error mb-2 items-start">
+              <ul className="list-disc pl-5">
+                {errors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            </div>
           )}
-          <div className="editor-row">
-            <button className="primary" onClick={save} disabled={saving || errors.length > 0}>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || errors.length > 0}>
               {saving ? "Saving…" : existsInSource ? "Save (overwrite)" : "Save as new map"}
             </button>
             {existsInSource && (
-              <button className="ghost" onClick={deleteMap}>
+              <button className="btn btn-ghost btn-sm" onClick={deleteMap}>
                 Delete from source
               </button>
             )}
           </div>
-          {status && <p className={status.kind === "error" ? "error" : "muted"}>{status.text}</p>}
-          {dirty && !status && <p className="muted">Unsaved changes (draft kept in this browser).</p>}
+          {status && <p className={status.kind === "error" ? "text-error" : "text-base-content/60"}>{status.text}</p>}
+          {dirty && !status && <p className="text-base-content/60">Unsaved changes (draft kept in this browser).</p>}
         </section>
 
-        <section>
-          <h3>Maps in source</h3>
-          <div className="editor-row">
-            <select value={existsInSource ? map.id : ""} onChange={(e) => loadSource(sources.find((s) => s.id === e.target.value)!)}>
+        <section className="border-t border-base-300 py-3">
+          <h3 className="mb-2 text-sm font-semibold">Maps in source</h3>
+          <div className="mb-2 flex flex-wrap items-end gap-2">
+            <select
+              className="select select-sm flex-1"
+              value={existsInSource ? map.id : ""}
+              onChange={(e) => loadSource(sources.find((s) => s.id === e.target.value)!)}
+            >
               {!existsInSource && <option value="">— unsaved: {map.id} —</option>}
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -439,34 +497,39 @@ export function MapEditor() {
                 </option>
               ))}
             </select>
-            <button onClick={() => loadSource(EMPTY_MAP)}>New</button>
+            <button className="btn btn-sm" onClick={() => loadSource(EMPTY_MAP)}>
+              New
+            </button>
           </div>
-          <details>
-            <summary className="muted">Layout text</summary>
-            <textarea
-              className="mono"
-              rows={Math.min(24, map.layout.length)}
-              spellCheck={false}
-              value={layoutText}
-              onChange={(e) => setLayoutDraft(e.target.value)}
-            />
-            <div className="editor-row">
-              <button onClick={applyLayoutText} disabled={layoutDraft === null || layoutDraft === map.layout.join("\n")}>
-                Apply layout
-              </button>
-              <button onClick={() => setLayoutDraft(null)} disabled={layoutDraft === null}>
-                Revert
-              </button>
+          <details className="collapse">
+            <summary className="collapse-title text-base-content/60">Layout text</summary>
+            <div className="collapse-content">
+              <textarea
+                className="textarea w-full font-mono text-xs"
+                rows={Math.min(24, map.layout.length)}
+                spellCheck={false}
+                value={layoutText}
+                onChange={(e) => setLayoutDraft(e.target.value)}
+              />
+              <div className="flex flex-wrap items-end gap-2">
+                <button className="btn btn-sm" onClick={applyLayoutText} disabled={layoutDraft === null || layoutDraft === map.layout.join("\n")}>
+                  Apply layout
+                </button>
+                <button className="btn btn-sm" onClick={() => setLayoutDraft(null)} disabled={layoutDraft === null}>
+                  Revert
+                </button>
+              </div>
             </div>
           </details>
         </section>
       </aside>
 
-      <main className="editor-canvas">
+      <main className="flex min-w-0 flex-col items-center justify-center overflow-auto p-4">
         <svg
           ref={svgRef}
           viewBox={`0 0 ${width} ${height}`}
-          style={{ aspectRatio: `${width} / ${height}`, cursor: hover ? "pointer" : "default" }}
+          className="w-full touch-none rounded-box border border-base-300 bg-[#11151c] select-none"
+          style={{ aspectRatio: `${width} / ${height}`, maxHeight: "calc(100vh - 4rem)", cursor: hover ? "pointer" : "default" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endStroke}
@@ -522,7 +585,7 @@ export function MapEditor() {
             );
           })}
         </svg>
-        <p className="muted editor-status mono">
+        <p className="mt-2 font-mono text-xs text-base-content/60">
           {grid.cols} × {grid.rows} tiles of {ts} px · {width} × {height} px · {walls.length} wall segments · {grid.spawns.length} spawns
           {tool === "wall" ? " · click a tile border to toggle a wall" : " · click a tile to add/remove a spawn"}
         </p>

@@ -102,7 +102,7 @@ export class GameRenderer {
       return r;
     }
     host.appendChild(r.app.canvas);
-    r.app.canvas.classList.add("game-canvas");
+    r.app.canvas.classList.add("block");
 
     r.world.addChild(r.buildMap());
     r.world.addChild(r.fxLayer);

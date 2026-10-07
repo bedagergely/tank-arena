@@ -15,7 +15,7 @@ bullets, faster tank, or a shield that absorbs one hit. Each room has an ephemer
 ```
 packages/shared   Engine-agnostic game core: rules, maps, fixed-step simulation, wire contracts
 apps/server       Colyseus 0.18 server (Node >= 22). Owns all game truth.
-apps/client       Vite + React UI, PixiJS renderer. Sends intents only, never simulates.
+apps/client       Vite + React UI (Tailwind CSS + daisyUI), PixiJS renderer. Sends intents only, never simulates.
 ```
 
 ## Getting started
@@ -140,3 +140,13 @@ covered by `packages/shared/test`.
 
 `chat` messages are validated and immediately re-broadcast to the room. Nothing is
 kept in room state or on disk; the client holds its own scrollback for the session.
+
+### Styling
+
+The client UI is styled with [Tailwind CSS](https://tailwindcss.com) v4 and
+[daisyUI](https://daisyui.com) v5, wired up through `@tailwindcss/vite` in
+`apps/client/vite.config.ts`. `apps/client/src/styles.css` is the single entry point: it
+imports Tailwind, registers the `tankarena` daisyUI theme (the game's dark palette) and
+disables the built-in themes. Prefer daisyUI components (`btn`, `card`, `badge`, `chat`,
+`list`, …) over hand-written CSS; the only styles that live outside utilities are the
+PixiJS canvas and the map editor's SVG, which set their own inline sizing.

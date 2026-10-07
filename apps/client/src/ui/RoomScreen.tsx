@@ -32,17 +32,24 @@ export function RoomScreen({ room, onLeave }: Props) {
 
   if (dropped) {
     return (
-      <main className="room">
-        <p className="error">{dropped}</p>
-        <button onClick={onLeave}>Back to home</button>
+      <main className="mx-auto w-full max-w-6xl px-6 py-4">
+        <div role="alert" className="alert alert-error">
+          <span>{dropped}</span>
+        </div>
+        <button className="btn mt-3" onClick={onLeave}>
+          Back to home
+        </button>
       </main>
     );
   }
 
   if (!state?.players) {
     return (
-      <main className="room">
-        <p className="muted">Connecting…</p>
+      <main className="mx-auto w-full max-w-6xl px-6 py-4">
+        <p className="flex items-center gap-2 text-base-content/60">
+          <span className="loading loading-spinner loading-sm" />
+          Connecting…
+        </p>
       </main>
     );
   }
@@ -58,30 +65,32 @@ export function RoomScreen({ room, onLeave }: Props) {
     : [...ROUND_OPTIONS, state.rounds].sort((a, b) => a - b);
 
   return (
-    <main className="room">
-      <header className="room-header">
-        <h1>Tank Arena</h1>
-        <span className="muted">
-          Room <span className="mono">{room.roomId}</span> · {map?.name ?? state.mapId} · {state.phase}
+    <main className="mx-auto w-full max-w-6xl px-6 py-4">
+      <header className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="text-2xl font-semibold">Tank Arena</h1>
+        <span className="flex-1 text-sm text-base-content/60">
+          Room <span className="font-mono">{room.roomId}</span> · {map?.name ?? state.mapId} ·{" "}
+          <span className="badge badge-outline badge-sm">{state.phase}</span>
           {state.phase !== "lobby" && ` · round ${state.round}/${state.rounds}`}
         </span>
-        <button className="ghost" onClick={onLeave}>
+        <button className="btn btn-ghost btn-sm" onClick={onLeave}>
           Leave
         </button>
       </header>
 
-      <div className="room-body">
-        {map ? <Arena room={room} state={state} map={map} /> : <p className="error">Unknown map “{state.mapId}”.</p>}
+      <div className="flex flex-wrap items-start gap-4">
+        {map ? <Arena room={room} state={state} map={map} /> : <p className="text-error">Unknown map “{state.mapId}”.</p>}
 
-        <aside className="sidebar">
+        <aside className="flex min-w-[260px] flex-1 flex-col gap-4">
           <PlayerList room={room} state={state} />
 
           {state.phase === "lobby" && me && me.slot >= 0 && (
-            <div className="lobby-actions">
-              <label className="rounds">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm">
                 Best of
                 {isHost ? (
                   <select
+                    className="select select-sm w-20"
                     value={state.rounds}
                     onChange={(e) => room.send("setRounds", { rounds: Number(e.target.value) })}
                   >
@@ -94,12 +103,13 @@ export function RoomScreen({ room, onLeave }: Props) {
                 ) : (
                   <strong>{state.rounds}</strong>
                 )}
-                <span className="muted">first to {winsNeeded(state.rounds)}</span>
+                <span className="text-base-content/60">first to {winsNeeded(state.rounds)}</span>
               </label>
               {isHost && (
-                <label className="rounds">
+                <label className="flex items-center gap-2 text-sm">
                   Bot
                   <select
+                    className="select select-sm"
                     value={botDifficulty}
                     onChange={(e) => setBotDifficulty(e.target.value as BotDifficulty)}
                     disabled={!canAddBot}
@@ -110,20 +120,20 @@ export function RoomScreen({ room, onLeave }: Props) {
                       </option>
                     ))}
                   </select>
-                  <button disabled={!canAddBot} onClick={() => room.send("addBot", { difficulty: botDifficulty })}>
+                  <button className="btn btn-sm" disabled={!canAddBot} onClick={() => room.send("addBot", { difficulty: botDifficulty })}>
                     Add bot
                   </button>
                 </label>
               )}
-              <button onClick={() => room.send("ready", { ready: !me.ready })}>
+              <button className="btn btn-sm" onClick={() => room.send("ready", { ready: !me.ready })}>
                 {me.ready ? "Not ready" : "Ready"}
               </button>
               {isHost && (
-                <button className="primary" disabled={!canStart} onClick={() => room.send("start", {})}>
+                <button className="btn btn-primary btn-sm" disabled={!canStart} onClick={() => room.send("start", {})}>
                   Start game
                 </button>
               )}
-              {!isHost && <p className="muted">Waiting for the host to start…</p>}
+              {!isHost && <p className="text-sm text-base-content/60">Waiting for the host to start…</p>}
             </div>
           )}
 
