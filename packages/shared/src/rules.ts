@@ -95,7 +95,7 @@ export function isPerkId(value: unknown): value is PerkId {
 
 export const DEFAULT_RULES: GameRules = {
   minPlayers: 2,
-  maxPlayers: 2,
+  maxPlayers: 4,
   tickRate: 30,
   countdownSeconds: 3,
   resultSeconds: 4,
@@ -130,7 +130,7 @@ export const DEFAULT_RULES: GameRules = {
     bulletSpeedMultiplier: 1.6,
     tankSpeedMultiplier: 1.5,
   },
-  winCondition: "first-hit",
+  winCondition: "last-standing",
 };
 
 /** Round wins needed to take a best-of-`rounds` match. */
