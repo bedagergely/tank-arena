@@ -9,7 +9,7 @@ import {
   type GameMap,
   type PerkId,
 } from "@tank-arena/shared";
-import { colorFor, GameRenderer } from "../game/GameRenderer.ts";
+import { colorFor, GameRenderer, PERK_COLORS } from "../game/GameRenderer.ts";
 import { cssColor } from "./PlayerList.tsx";
 import { useKeyboardInput } from "../game/useKeyboardInput.ts";
 import type { GameRoom, GameStateSnapshot } from "../net/client.ts";
@@ -51,11 +51,18 @@ export function Arena({ room, state, map }: Props) {
   const myTank = state.phase === "playing" ? state.tanks[String(mySlot)] : undefined;
 
   return (
-    <div className="arena" style={{ width: map.width, height: map.height }}>
-      <div ref={hostRef} className="arena-canvas" />
+    <div
+      className="relative flex-none overflow-hidden rounded-md border border-base-300 bg-[#0d0a14] [&>canvas]:block"
+      style={{ width: map.width, height: map.height }}
+    >
+      <div ref={hostRef} />
       {state.phase !== "lobby" && <Scoreboard state={state} />}
       {myTank && <PerkBar tank={myTank} />}
-      {overlay && <div className="arena-overlay">{overlay}</div>}
+      {overlay && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-center">
+          {overlay}
+        </div>
+      )}
     </div>
   );
 }
@@ -65,14 +72,14 @@ function Scoreboard({ state }: { state: GameStateSnapshot }) {
     .filter((p) => p.slot >= 0)
     .sort((a, b) => a.slot - b.slot);
   return (
-    <div className="scoreboard">
+    <div className="pointer-events-none absolute top-2 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-3 py-1 text-sm backdrop-blur">
       {seated.map((p) => (
-        <span key={p.sessionId} className="score">
-          <span className="swatch" style={{ background: cssColor(colorFor(p.slot)) }} />
+        <span key={p.sessionId} className="inline-flex items-center gap-1.5 font-semibold">
+          <span className="inline-block h-3 w-3 rounded" style={{ background: cssColor(colorFor(p.slot)) }} />
           {p.wins}
         </span>
       ))}
-      <span className="muted">first to {winsNeeded(state.rounds)}</span>
+      <span className="text-base-content/60">first to {winsNeeded(state.rounds)}</span>
     </div>
   );
 }
@@ -91,10 +98,14 @@ function PerkBar({ tank }: { tank: TankSnapshot }) {
   const active = PERK_TIMERS.filter(([, read]) => read(tank) > 0);
   if (active.length === 0) return null;
   return (
-    <div className="perks">
+    <div className="pointer-events-none absolute bottom-2 left-2 flex gap-1.5">
       {active.map(([perk, read]) => (
-        <span key={perk} className={`perk perk-${perk}`}>
-          {PERK_NAMES[perk]} <span className="mono">{Math.ceil(read(tank))}s</span>
+        <span
+          key={perk}
+          className="rounded-full border bg-black/70 px-2 py-0.5 text-xs"
+          style={{ color: cssColor(PERK_COLORS[perk]), borderColor: cssColor(PERK_COLORS[perk]) }}
+        >
+          {PERK_NAMES[perk]} <span className="font-mono">{Math.ceil(read(tank))}s</span>
         </span>
       ))}
     </div>
@@ -107,9 +118,9 @@ function overlayFor(room: GameRoom, state: GameStateSnapshot, mySlot: number) {
       const seated = Object.values(state.players).filter((p) => p.slot >= 0).length;
       return (
         <>
-          <h2>Waiting for players</h2>
+          <h2 className="text-[2rem] text-primary">Waiting for players</h2>
           <p>
-            {seated}/{state.minPlayers} needed · share room ID <span className="mono">{room.roomId}</span>
+            {seated}/{state.minPlayers} needed · share room ID <span className="font-mono">{room.roomId}</span>
           </p>
         </>
       );
@@ -117,7 +128,7 @@ function overlayFor(room: GameRoom, state: GameStateSnapshot, mySlot: number) {
     case "countdown":
       return (
         <>
-          <h2 className="big">{state.countdown || "GO"}</h2>
+          <h2 className="text-[5rem] leading-none text-primary">{state.countdown || "GO"}</h2>
           <p>
             Round {state.round} of {state.rounds}
           </p>
@@ -126,7 +137,7 @@ function overlayFor(room: GameRoom, state: GameStateSnapshot, mySlot: number) {
     case "finished": {
       return (
         <>
-          <h2>{resultTitle(state, state.winnerSlot, mySlot, "round")}</h2>
+          <h2 className="text-[2rem] text-primary">{resultTitle(state, state.winnerSlot, mySlot, "round")}</h2>
           <p>{scoreline(state)}</p>
           <p>Next round in {state.countdown}…</p>
         </>
@@ -135,7 +146,7 @@ function overlayFor(room: GameRoom, state: GameStateSnapshot, mySlot: number) {
     case "match-over": {
       return (
         <>
-          <h2>{resultTitle(state, state.matchWinnerSlot, mySlot, "match")}</h2>
+          <h2 className="text-[2rem] text-primary">{resultTitle(state, state.matchWinnerSlot, mySlot, "match")}</h2>
           <p>{scoreline(state)}</p>
           <p>Back to the room in {state.countdown}…</p>
         </>

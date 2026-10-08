@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type SubmitEvent } from "react";
 import { useLobbyRoom } from "@colyseus/react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
 import { isJoinable, joinLobby, LOBBY_FILTER, type JoinRequest, type ListingMetadata } from "../net/client.ts";
+import { Pumpkin } from "./Pumpkin.tsx";
 
 interface Props {
   onJoin: (request: JoinRequest) => void;
@@ -43,13 +44,21 @@ export function Home({ onJoin, busy, error }: Props) {
   }
 
   return (
-    <main className="home">
-      <h1>Tank Arena</h1>
-      <p className="tagline">Two tanks. One bullet each. Five bounces. Don&apos;t get hit.</p>
+    <main className="relative z-10 mx-auto max-w-[860px] px-6 py-12">
+      <header className="flex items-center gap-4">
+        <Pumpkin className="h-16 w-16 shrink-0 animate-float drop-shadow-[0_0_18px_rgba(255,122,24,0.45)]" />
+        <div>
+          <h1 className="animate-flicker font-display text-[3rem] leading-none text-primary">Tank Arena</h1>
+          <p className="mt-1 text-base-content/60">
+            Two tanks. One bullet each. Five bounces. Don&apos;t get hit.
+          </p>
+        </div>
+      </header>
 
-      <label className="field">
-        <span>Your name</span>
+      <label className="mt-8 mb-4 flex flex-col gap-1.5">
+        <span className="text-xs tracking-widest text-base-content/60 uppercase">Your name</span>
         <input
+          className="input w-full"
           value={name}
           maxLength={MAX_NAME_LENGTH}
           placeholder="Anonymous"
@@ -58,60 +67,72 @@ export function Home({ onJoin, busy, error }: Props) {
         />
       </label>
 
-      <div className="home-columns">
-        <form className="card" onSubmit={onCreate}>
-          <h2>Create a room</h2>
-          <label className="field">
-            <span>Map</span>
-            <select value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
-              {listMaps().map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" disabled={busy}>
-            Create room
-          </button>
+      <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+        <form className="card border border-base-300 bg-base-200/80 shadow-lg shadow-black/30" onSubmit={onCreate}>
+          <div className="card-body gap-3 p-5">
+            <h2 className="font-display text-2xl text-primary">Create a room</h2>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs tracking-widest text-base-content/60 uppercase">Map</span>
+              <select className="select w-full" value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
+                {listMaps().map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="btn btn-primary mt-1" type="submit" disabled={busy}>
+              Create room
+            </button>
+          </div>
         </form>
 
-        <form className="card" onSubmit={onJoinById}>
-          <h2>Join a room</h2>
-          <label className="field">
-            <span>Room ID</span>
-            <input
-              value={roomId}
-              placeholder="e.g. Ab3dEfGh1"
-              onChange={(e) => setRoomId(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <button type="submit" disabled={busy || !roomId.trim()}>
-            Join by ID
-          </button>
+        <form className="card border border-base-300 bg-base-200/80 shadow-lg shadow-black/30" onSubmit={onJoinById}>
+          <div className="card-body gap-3 p-5">
+            <h2 className="font-display text-2xl text-primary">Join a room</h2>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs tracking-widest text-base-content/60 uppercase">Room ID</span>
+              <input
+                className="input w-full"
+                value={roomId}
+                placeholder="e.g. Ab3dEfGh1"
+                onChange={(e) => setRoomId(e.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <button className="btn" type="submit" disabled={busy || !roomId.trim()}>
+              Join by ID
+            </button>
 
-          <h3>Open rooms</h3>
-          {listError && <p className="error">{listError}</p>}
-          {rooms.length === 0 && !listError && <p className="muted">No open rooms yet — create one!</p>}
-          <ul className="room-list">
-            {rooms.map((r) => (
-              <li key={r.roomId}>
-                <span className="mono">{r.roomId}</span>
-                <span className="muted">
-                  {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
-                </span>
-                <button type="button" disabled={busy} onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}>
-                  Join
-                </button>
-              </li>
-            ))}
-          </ul>
+            <h3 className="mt-3 text-sm tracking-widest text-base-content/50 uppercase">Open rooms</h3>
+            {listError && <p className="text-error">{listError}</p>}
+            {rooms.length === 0 && !listError && <p className="text-base-content/60">No open rooms yet — create one!</p>}
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {rooms.map((r) => (
+                <li key={r.roomId} className="flex items-center gap-2.5 rounded-lg bg-base-300/60 px-3 py-2">
+                  <span className="font-mono">{r.roomId}</span>
+                  <span className="flex-1 text-xs text-base-content/60">
+                    {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
+                  </span>
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}
+                  >
+                    Join
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </form>
       </div>
 
-      {error && <p className="error">{error.message || "Could not connect to the server."}</p>}
-      <p className="muted help">Move: W/S or ↑/↓ · Turn: A/D or ←/→ · Fire: Space</p>
+      {error && <p className="text-error">{error.message || "Could not connect to the server."}</p>}
+      <p className="mt-8 text-xs text-base-content/50">
+        Move: W/S or ↑/↓ · Turn: A/D or ←/→ · Fire: Space
+      </p>
     </main>
   );
 }

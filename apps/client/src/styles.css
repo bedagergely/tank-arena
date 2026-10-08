@@ -1,449 +1,138 @@
-:root {
+@import "tailwindcss";
+
+/* daisyUI supplies the components (btn, input, select, badge, chat, card …).
+   Only our custom "tankarena" theme is registered so no unused built-ins ship. */
+@plugin "daisyui" {
+  themes: false;
+}
+
+/* Halloween palette: pumpkin orange, witch purple and toxic green on a
+   moonless-night base. */
+@plugin "daisyui/theme" {
+  name: "tankarena";
+  default: true;
+  prefersdark: true;
   color-scheme: dark;
-  --bg: #0b0e13;
-  --panel: #161b24;
-  --panel-2: #1e2531;
-  --border: #2a3342;
-  --text: #e6e9ef;
-  --muted: #8b95a7;
-  --accent: #4fc3f7;
-  --danger: #ff6b6b;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 15px;
+
+  --color-base-100: #0e0a17;
+  --color-base-200: #171026;
+  --color-base-300: #241a36;
+  --color-base-content: #f2e8d5;
+
+  --color-primary: #ff7a18;
+  --color-primary-content: #1b0c00;
+  --color-secondary: #a855f7;
+  --color-secondary-content: #f6f0ff;
+  --color-accent: #7cff4f;
+  --color-accent-content: #08210a;
+  --color-neutral: #3a2b52;
+  --color-neutral-content: #f2e8d5;
+
+  --color-info: #5ee7ff;
+  --color-info-content: #04171c;
+  --color-success: #7cff4f;
+  --color-success-content: #08210a;
+  --color-warning: #ffc02e;
+  --color-warning-content: #241600;
+  --color-error: #ff4d4d;
+  --color-error-content: #2a0505;
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
-* {
-  box-sizing: border-box;
+/* Spooky typography. Creepster for display headings, Special Elite (a vintage
+   typewriter face) for the body. System fallbacks keep things readable offline. */
+@theme {
+  --font-display: "Creepster", "Chiller", "Impact", system-ui, sans-serif;
+  --font-body: "Special Elite", "Courier New", ui-monospace, monospace;
+
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 11s ease-in-out infinite;
+  --animate-flicker: flicker 4s ease-in-out infinite;
+  --animate-drift: drift 40s linear infinite;
+  --animate-rise: rise 9s linear infinite;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-}
-
-h1,
-h2,
-h3 {
-  margin: 0 0 0.5rem;
-  font-weight: 600;
-}
-
-button {
-  font: inherit;
-  padding: 0.5rem 0.9rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  cursor: pointer;
-}
-button:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #06232f;
-  font-weight: 600;
-}
-button.ghost {
-  background: transparent;
-}
-
-input,
-select {
-  font: inherit;
-  padding: 0.5rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-}
-input:focus,
-select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.muted {
-  color: var(--muted);
-}
-.error {
-  color: var(--danger);
-}
-
-/* Home ------------------------------------------------------------------- */
-
-.home {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
-}
-.home h1 {
-  font-size: 2.4rem;
-}
-.tagline {
-  color: var(--muted);
-  margin-top: 0;
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-bottom: 0.9rem;
-}
-.field span {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-.home-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.2rem;
-  margin-top: 1rem;
-}
-@media (max-width: 700px) {
-  .home-columns {
-    grid-template-columns: 1fr;
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-18px) rotate(2deg);
   }
 }
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1.2rem;
-}
-.card h3 {
-  margin-top: 1.2rem;
-  font-size: 0.95rem;
-  color: var(--muted);
-}
-.room-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.room-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.4rem 0.6rem;
-  background: var(--panel-2);
-  border-radius: 6px;
-}
-.room-list li .muted {
-  flex: 1;
-  font-size: 0.85rem;
-}
-.help {
-  margin-top: 2rem;
-  font-size: 0.85rem;
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--color-primary) 55%, transparent);
+  }
+  45% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.72;
+    text-shadow: 0 0 4px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  }
+  55% {
+    opacity: 0.95;
+  }
 }
 
-/* Room ------------------------------------------------------------------- */
-
-.room {
-  padding: 1rem 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.room-header {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-.room-header h1 {
-  font-size: 1.4rem;
-  margin: 0;
-}
-.room-header .muted {
-  flex: 1;
-}
-.room-body {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  flex-wrap: wrap;
-}
-.sidebar {
-  flex: 1;
-  min-width: 260px;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+@keyframes drift {
+  from {
+    transform: translateX(-8%);
+  }
+  to {
+    transform: translateX(8%);
+  }
 }
 
-.arena {
-  position: relative;
-  flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: #11151c;
-}
-.arena-canvas,
-.game-canvas {
-  display: block;
-}
-.arena-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background: rgba(6, 8, 12, 0.55);
-  pointer-events: none;
-}
-.arena-overlay h2 {
-  font-size: 2rem;
-}
-.arena-overlay h2.big {
-  font-size: 5rem;
-  line-height: 1;
-}
-.scoreboard {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.25rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(6, 8, 12, 0.6);
-  font-size: 0.9rem;
-  pointer-events: none;
-}
-.scoreboard .score {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-weight: 600;
-}
-.perks {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  display: flex;
-  gap: 0.4rem;
-  pointer-events: none;
-}
-.perk {
-  font-size: 0.8rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: rgba(6, 8, 12, 0.7);
-  border: 1px solid;
-}
-.perk-0 {
-  color: #ffb74d;
-}
-.perk-1 {
-  color: #ff5252;
-}
-.perk-2 {
-  color: #69f0ae;
-}
-.perk-3 {
-  color: #40c4ff;
-}
-.rounds {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.9rem;
+@keyframes rise {
+  0% {
+    transform: translateY(10vh) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-110vh) scale(1.1);
+    opacity: 0;
+  }
 }
 
-.players ul,
-.chat-feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.players li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-}
-.players li.me {
-  background: var(--panel-2);
-}
-.players .name {
-  flex: 1;
-}
-.swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: inline-block;
-}
-.tag {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  background: var(--border);
-  color: var(--muted);
-}
-.tag.ready {
-  background: #1f4d2a;
-  color: #8fe3a0;
-}
-.tag.bot {
-  background: #3a2f5c;
-  color: #c9b8ff;
-}
-.players button.kick {
-  padding: 0 0.4rem;
-  line-height: 1.2;
-  font-size: 0.9rem;
-}
-.wins {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+@layer base {
+  html {
+    font-family: var(--font-body);
+    font-size: 15px;
+  }
 
-.lobby-actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
+  body {
+    margin: 0;
+    background-color: var(--color-base-100);
+    /* Moonlit vignette with a faint purple haze. */
+    background-image:
+      radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--color-secondary) 22%, transparent), transparent 60%),
+      radial-gradient(90% 60% at 50% 110%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 65%);
+    background-attachment: fixed;
+    color: var(--color-base-content);
+  }
 
-.chat {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.8rem;
-  display: flex;
-  flex-direction: column;
-}
-.chat-feed {
-  height: 260px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.92rem;
-  padding-right: 0.3rem;
-}
-.chat-feed li {
-  word-break: break-word;
-}
-.chat-feed .chat-system {
-  color: var(--muted);
-  font-style: italic;
-}
-.chat-feed .chat-self strong {
-  color: var(--accent);
-}
-.chat-form {
-  display: flex;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-}
-.chat-form input {
-  flex: 1;
-}
-
-/* Map editor (dev only) --------------------------------------------------- */
-
-.editor {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  height: 100vh;
-}
-.editor-panel {
-  overflow-y: auto;
-  overflow-x: hidden;
-  overflow-wrap: anywhere;
-  padding: 1rem 1.2rem;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
-  font-size: 0.9rem;
-}
-.editor-panel section {
-  padding: 0.8rem 0;
-  border-top: 1px solid var(--border);
-}
-.editor-panel h3 {
-  font-size: 0.95rem;
-  margin-bottom: 0.6rem;
-}
-.editor-panel .field {
-  margin-bottom: 0.6rem;
-  flex: 1;
-}
-.editor-panel .help {
-  margin-top: 0.4rem;
-}
-.editor-panel textarea {
-  width: 100%;
-  margin: 0.5rem 0;
-  font: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  padding: 0.5rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-}
-.editor-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  margin-bottom: 0.5rem;
-}
-.editor-row > button {
-  margin-bottom: 0.6rem;
-}
-.editor-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 0.6rem;
-}
-.editor-errors {
-  margin: 0 0 0.6rem;
-  padding-left: 1.2rem;
-  font-size: 0.85rem;
-}
-.editor-canvas {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  overflow: auto;
-  min-width: 0;
-}
-.editor-canvas svg {
-  width: 100%;
-  max-height: calc(100vh - 4rem);
-  border: 1px solid var(--border);
-  background: #11151c;
-  touch-action: none;
-  user-select: none;
-}
-.editor-status {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
 }
