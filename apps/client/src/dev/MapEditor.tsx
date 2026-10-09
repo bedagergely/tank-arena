@@ -38,9 +38,9 @@ const TANK_RADIUS = DEFAULT_RULES.tank.radius;
 const MIN_TILES = 2;
 const MAX_TILES = 40;
 
-/* Editor palette mirrors the in-game renderer (light stone ground, stone walls). */
-const EDITOR_FLOOR = "#726c80";
-const EDITOR_GRID = "#57516a";
+/* Editor palette mirrors the in-game renderer (sand ground, stone walls). */
+const EDITOR_FLOOR = "#db9f5c";
+const EDITOR_GRID = "#9a6a30";
 const EDITOR_WALL = "#3f3752";
 
 const FIELD = "mb-2.5 flex flex-1 flex-col gap-1.5";

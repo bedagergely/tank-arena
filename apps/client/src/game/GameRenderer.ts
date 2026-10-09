@@ -11,15 +11,15 @@ import {
   type PerkId,
 } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
-import { EngineSound, playBeep } from "./Sound.ts";
+import { EngineSound, playCannon } from "./Sound.ts";
 
 export const SLOT_COLORS = [0x4fc3f7, 0xff8a65, 0x81c784, 0xffd54f, 0xba68c8, 0x90a4ae];
 
 const BG = 0x0d0a14;
-const FLOOR = 0x726c80;
-const FLOOR_DARK = 0x655f73;
-const FLOOR_LIGHT = 0x7f798d;
-const FLOOR_SEAM = 0x484253;
+const FLOOR = 0xdb9f5c;
+const FLOOR_DARK = 0xcd914e;
+const FLOOR_LIGHT = 0xe6b06a;
+const FLOOR_SEAM = 0xa06a2f;
 const WALL = 0x3f3752;
 const WALL_EDGE = 0x5c5170;
 /** Paving stones per gameplay tile; keeps the floor pattern finer than the tile grid. */
@@ -145,7 +145,7 @@ export class GameRenderer {
 
     // Flagstone floor: fill with mortar, then lay paving stones smaller than the
     // gameplay tiles (with per-stone shade variation) so the ground reads as
-    // lighter stone without echoing the tile grid.
+    // warm sand without echoing the tile grid.
     g.rect(0, 0, width, height).fill(FLOOR_SEAM);
     const stone = this.map.tileSize / STONES_PER_TILE;
     const seam = 1;
@@ -378,7 +378,7 @@ export class GameRenderer {
         const t = this.tanks.get(e.slot);
         if (t) {
           this.burst(t.x + Math.cos(t.angle) * 20, t.y + Math.sin(t.angle) * 20, 0xfff3b0, 6, 90);
-          playBeep();
+          playCannon();
         } 
         break;
       }
