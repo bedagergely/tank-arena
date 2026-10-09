@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
 import {
+  DEFAULT_RULES,
   PERK_BULLET_SPEED,
   PERK_BULLETS,
   PERK_SHIELD,
@@ -10,14 +11,24 @@ import {
   type PerkId,
 } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
-import { playBeep } from "./Sound.ts";
+import { EngineSound, playCannon } from "./Sound.ts";
 
 export const SLOT_COLORS = [0x4fc3f7, 0xff8a65, 0x81c784, 0xffd54f, 0xba68c8, 0x90a4ae];
 
-const BG = 0x11151c;
-const WALL = 0x3a4556;
-const WALL_EDGE = 0x556274;
-const FLOOR = 0x1a2029;
+const BG = 0x0d0a14;
+const FLOOR = 0xdb9f5c;
+const FLOOR_DARK = 0xcd914e;
+const FLOOR_LIGHT = 0xe6b06a;
+const FLOOR_SEAM = 0xa06a2f;
+const WALL = 0x3f3752;
+const WALL_EDGE = 0x5c5170;
+/** Paving stones per gameplay tile; keeps the floor pattern finer than the tile grid. */
+const STONES_PER_TILE = 3;
+const TURRET = 0xff7a18;
+const CARVE = 0x241000;
+const BONE = 0xe8e0d0;
+const STEM = 0x5aa832;
+const SHELL = 0x2b1d0f;
 
 export const PERK_COLORS: Readonly<Record<PerkId, number>> = {
   [PERK_BULLETS]: 0xffb74d,
@@ -35,6 +46,8 @@ const LOOT_SIZE = 20;
 
 /** How fast displayed positions chase the server state (1/s). */
 const LERP_RATE = 18;
+/** Distance (world units) over which other tanks' engines fade out. */
+const ENGINE_FALLOFF = 650;
 
 interface TankView {
   root: Container;
@@ -44,6 +57,10 @@ interface TankView {
   x: number;
   y: number;
   angle: number;
+  /** Last server position, used to derive movement speed for the engine sound. */
+  sx: number;
+  sy: number;
+  speed: number;
 }
 
 interface LootView {
@@ -76,6 +93,7 @@ export class GameRenderer {
   private readonly bullets = new Map<number, BulletView>();
   private readonly loot = new Map<number, LootView>();
   private readonly particles: Particle[] = [];
+  private readonly engines = new Map<number, EngineSound>();
   private elapsed = 0;
   private readonly offEvent: () => void;
   private destroyed = false;
@@ -114,6 +132,8 @@ export class GameRenderer {
   destroy() {
     this.destroyed = true;
     this.offEvent();
+    for (const engine of this.engines.values()) engine.destroy();
+    this.engines.clear();
     if (this.app.renderer) {
       this.app.ticker.remove(this.tick);
       this.app.destroy(true, { children: true });
@@ -122,7 +142,37 @@ export class GameRenderer {
 
   private buildMap(): Graphics {
     const g = new Graphics();
-    g.rect(0, 0, this.map.width, this.map.height).fill(FLOOR);
+    const { width, height } = this.map;
+
+    // Flagstone floor: fill with mortar, then lay paving stones smaller than the
+    // gameplay tiles (with per-stone shade variation) so the ground reads as
+    // warm sand without echoing the tile grid.
+    g.rect(0, 0, width, height).fill(FLOOR_SEAM);
+    const stone = this.map.tileSize / STONES_PER_TILE;
+    const seam = 1;
+    const rng = mulberry32(0x5eed);
+    for (let row = 0; row * stone < height; row++) {
+      for (let col = 0; col * stone < width; col++) {
+        const x = col * stone;
+        const y = row * stone;
+        const w = Math.min(stone, width - x) - seam;
+        const h = Math.min(stone, height - y) - seam;
+        if (w <= 0 || h <= 0) continue;
+        const shade = rng();
+        const color = shade > 0.7 ? FLOOR_LIGHT : shade > 0.35 ? FLOOR : FLOOR_DARK;
+        g.rect(x + seam, y + seam, w, h).fill(color);
+      }
+    }
+
+    // Faint speckles so the stone has a bit of grain rather than flat paint.
+    const speckles = Math.floor((width * height) / 1400);
+    for (let i = 0; i < speckles; i++) {
+      const x = rng() * width;
+      const y = rng() * height;
+      const r = 0.5 + rng() * 1.4;
+      g.circle(x, y, r).fill({ color: rng() > 0.5 ? FLOOR_DARK : FLOOR_LIGHT, alpha: 0.5 });
+    }
+
     for (const w of this.map.walls) {
       g.rect(w.x, w.y, w.width, w.height).fill(WALL);
       // Light top/left edge for a bit of depth.
@@ -137,15 +187,20 @@ export class GameRenderer {
     const k = 1 - Math.exp(-LERP_RATE * dt);
     this.elapsed += dt;
     this.syncLoot(dt);
-    this.syncTanks(k);
+    this.syncTanks(dt, k);
     this.syncBullets(k);
     this.updateParticles(dt);
   };
 
-  private syncTanks(k: number) {
+  private syncTanks(dt: number, k: number) {
     const state = this.room.state;
     const names = new Map<number, string>();
-    for (const p of state.players.values()) if (p.slot >= 0) names.set(p.slot, p.name);
+    let localSlot = -1;
+    for (const p of state.players.values()) {
+      if (p.slot >= 0) names.set(p.slot, p.name);
+      if (p.sessionId === this.room.sessionId) localSlot = p.slot;
+    }
+    const local = localSlot >= 0 ? this.tanks.get(localSlot) : undefined;
     const seen = new Set<number>();
     for (const t of state.tanks.values()) {
       seen.add(t.slot);
@@ -163,6 +218,17 @@ export class GameRenderer {
       const name = names.get(t.slot) ?? `P${t.slot + 1}`;
       if (view.label.text !== name) view.label.text = name;
 
+      // Derive speed from the authoritative position so the engine only revs
+      // while the tank is actually moving.
+      const inst = Math.hypot(t.x - view.sx, t.y - view.sy) / Math.max(dt, 1e-4);
+      view.sx = t.x;
+      view.sy = t.y;
+      view.speed += (inst - view.speed) * Math.min(1, dt * 12);
+      const speed01 = clamp(view.speed / DEFAULT_RULES.tank.speed, 0, 1);
+      const dist = local && t.slot !== localSlot ? Math.hypot(view.x - local.x, view.y - local.y) : 0;
+      const attenuation = t.slot === localSlot ? 1 : Math.max(0, 1 - dist / ENGINE_FALLOFF);
+      this.setEngine(t.slot, t.alive ? speed01 * attenuation : 0);
+
       view.shield.visible = t.perkShield > 0;
       if (view.shield.visible) {
         view.shield.alpha = 0.55 + 0.35 * Math.sin(this.elapsed * 6);
@@ -174,7 +240,24 @@ export class GameRenderer {
       if (seen.has(slot)) continue;
       view.root.destroy({ children: true });
       this.tanks.delete(slot);
+      const engine = this.engines.get(slot);
+      if (engine) {
+        engine.destroy();
+        this.engines.delete(slot);
+      }
     }
+  }
+
+  /** Lazily creates an engine voice for a tank and drives it with `throttle` (0..1). */
+  private setEngine(slot: number, throttle: number) {
+    let engine = this.engines.get(slot);
+    if (!engine) {
+      if (throttle <= 0.02) return;
+      engine = new EngineSound();
+      engine.start();
+      this.engines.set(slot, engine);
+    }
+    engine.setThrottle(throttle);
   }
 
   private syncBullets(k: number) {
@@ -185,7 +268,7 @@ export class GameRenderer {
       let view = this.bullets.get(b.id);
       if (!view) {
         const radius = state.bulletRadius;
-        const g = new Graphics().circle(0, 0, radius).fill(0xffffff);
+        const g = new Graphics().circle(0, 0, radius).fill(SHELL);
         g.circle(0, 0, radius * 2).fill({ color: colorFor(b.ownerSlot), alpha: 0.25 });
         this.world.addChild(g);
         view = { g, x: b.x, y: b.y };
@@ -228,7 +311,7 @@ export class GameRenderer {
     const half = LOOT_SIZE / 2;
     const box = new Graphics();
     box.circle(0, 0, half * 1.6).fill({ color, alpha: 0.18 });
-    box.roundRect(-half, -half, LOOT_SIZE, LOOT_SIZE, 4).fill(0x232b36).stroke({ color, width: 2 });
+    box.roundRect(-half, -half, LOOT_SIZE, LOOT_SIZE, 4).fill(0x2a1f38).stroke({ color, width: 2 });
     const glyph = new Text({
       text: PERK_GLYPHS[perk],
       style: { fontFamily: "system-ui, sans-serif", fontSize: 12, fontWeight: "bold", fill: color },
@@ -246,15 +329,30 @@ export class GameRenderer {
     const r = this.room.state.tankRadius;
     const color = colorFor(slot);
     const body = new Graphics();
+    // Hull keeps the slot colour so players stay distinguishable.
     body.roundRect(-r, -r * 0.8, r * 2, r * 1.6, 3).fill(color);
-    body.rect(-r, -r, r * 2, r * 0.25).fill({ color: 0x000000, alpha: 0.35 });
-    body.rect(-r, r * 0.75, r * 2, r * 0.25).fill({ color: 0x000000, alpha: 0.35 });
-    body.circle(0, 0, r * 0.55).fill({ color, alpha: 1 }).stroke({ color: 0x000000, alpha: 0.4, width: 2 });
-    body.rect(0, -3, r * 1.6, 6).fill(0xe0e0e0);
+    // Pumpkin ridges.
+    body.roundRect(-r * 0.42, -r * 0.78, r * 0.26, r * 1.56, 2).fill({ color: 0x000000, alpha: 0.16 });
+    body.roundRect(r * 0.16, -r * 0.78, r * 0.26, r * 1.56, 2).fill({ color: 0x000000, alpha: 0.16 });
+    // Treads.
+    body.rect(-r, -r, r * 2, r * 0.25).fill({ color: 0x000000, alpha: 0.45 });
+    body.rect(-r, r * 0.75, r * 2, r * 0.25).fill({ color: 0x000000, alpha: 0.45 });
+    // Carved jack-o'-lantern face on the front of the hull.
+    body.poly([r * 0.02, -r * 0.62, r * 0.42, -r * 0.5, r * 0.14, -r * 0.22]).fill(CARVE);
+    body.poly([r * 0.02, r * 0.62, r * 0.42, r * 0.5, r * 0.14, r * 0.22]).fill(CARVE);
+    body
+      .poly([r * 0.02, -r * 0.14, r * 0.18, 0, r * 0.34, -r * 0.14, r * 0.5, 0, r * 0.66, -r * 0.14, r * 0.72, r * 0.14, r * 0.02, r * 0.14])
+      .fill(CARVE);
+    // Stem at the back.
+    body.roundRect(-r * 0.98, -r * 0.12, r * 0.3, r * 0.24, 2).fill(STEM);
+    // Turret cap and bone barrel.
+    body.circle(0, 0, r * 0.55).fill(TURRET).stroke({ color: CARVE, width: 2 });
+    body.rect(0, -3, r * 1.6, 6).fill(BONE);
+    body.circle(r * 1.6, 0, 3.4).fill(BONE).stroke({ color: CARVE, width: 1 });
 
     const label = new Text({
       text: "",
-      style: { fontFamily: "system-ui, sans-serif", fontSize: 11, fill: 0xdddddd },
+      style: { fontFamily: "Creepster, system-ui, sans-serif", fontSize: 12, fill: 0xffe9c9 },
     });
     label.anchor.set(0.5, 1);
     label.position.set(0, -r - 6);
@@ -272,7 +370,7 @@ export class GameRenderer {
     root.addChild(shield, body, label);
     root.position.set(x, y);
     this.world.addChild(root);
-    return { root, body, shield, label, x, y, angle };
+    return { root, body, shield, label, x, y, angle, sx: x, sy: y, speed: 0 };
   }
 
   private onEvent(e: GameEventMessage) {
@@ -281,12 +379,12 @@ export class GameRenderer {
         const t = this.tanks.get(e.slot);
         if (t) {
           this.burst(t.x + Math.cos(t.angle) * 20, t.y + Math.sin(t.angle) * 20, 0xfff3b0, 6, 90);
-          playBeep();
+          playCannon();
         } 
         break;
       }
       case "bounce":
-        this.burst(e.x, e.y, 0xffffff, 5, 60);
+        this.burst(e.x, e.y, 0xffd27f, 5, 60);
         break;
       case "hit": {
         const t = this.tanks.get(e.targetSlot);
@@ -344,4 +442,20 @@ function shortestAngle(from: number, to: number): number {
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Small deterministic PRNG so the stone tiles are stable between renders. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
