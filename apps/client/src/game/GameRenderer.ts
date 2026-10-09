@@ -28,6 +28,7 @@ const TURRET = 0xff7a18;
 const CARVE = 0x241000;
 const BONE = 0xe8e0d0;
 const STEM = 0x5aa832;
+const SHELL = 0x2b1d0f;
 
 export const PERK_COLORS: Readonly<Record<PerkId, number>> = {
   [PERK_BULLETS]: 0xffb74d,
@@ -267,7 +268,7 @@ export class GameRenderer {
       let view = this.bullets.get(b.id);
       if (!view) {
         const radius = state.bulletRadius;
-        const g = new Graphics().circle(0, 0, radius).fill(0xfff1c0);
+        const g = new Graphics().circle(0, 0, radius).fill(SHELL);
         g.circle(0, 0, radius * 2).fill({ color: colorFor(b.ownerSlot), alpha: 0.25 });
         this.world.addChild(g);
         view = { g, x: b.x, y: b.y };
