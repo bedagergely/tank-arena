@@ -1,5 +1,6 @@
 import { colorFor } from "../game/GameRenderer.ts";
 import type { GameRoom, GameStateSnapshot } from "../net/client.ts";
+import { BTN, BTN_GHOST, BTN_XS } from "./controls.ts";
 
 interface Props {
   room: GameRoom;
@@ -39,7 +40,7 @@ export function PlayerList({ room, state }: Props) {
             <span className="text-xs text-base-content/60">{p.wins} W</span>
             {inLobby && isHost && p.isBot && (
               <button
-                className="btn btn-ghost btn-xs"
+                className={`${BTN} ${BTN_GHOST} ${BTN_XS}`}
                 title="Remove bot"
                 aria-label={`Remove ${p.name}`}
                 onClick={() => room.send("removeBot", { sessionId: p.sessionId })}

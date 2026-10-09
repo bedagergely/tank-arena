@@ -1,19 +1,9 @@
 @import "tailwindcss";
 
-/* daisyUI supplies the components (btn, input, select, badge, chat, card …).
-   Only our custom "tankarena" theme is registered so no unused built-ins ship. */
-@plugin "daisyui" {
-  themes: false;
-}
-
 /* Halloween palette: pumpkin orange, witch purple and toxic green on a
-   moonless-night base. */
-@plugin "daisyui/theme" {
-  name: "tankarena";
-  default: true;
-  prefersdark: true;
-  color-scheme: dark;
-
+   moonless-night base. Registered on Tailwind's theme so the colour utilities
+   (bg-base-100, text-primary, border-base-300 …) keep working without daisyUI. */
+@theme {
   --color-base-100: #0e0a17;
   --color-base-200: #171026;
   --color-base-300: #241a36;
@@ -37,19 +27,8 @@
   --color-error: #ff4d4d;
   --color-error-content: #2a0505;
 
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 0;
-  --noise: 0;
-}
-
-/* Spooky typography. Creepster for display headings, Special Elite (a vintage
-   typewriter face) for the body. System fallbacks keep things readable offline. */
-@theme {
+  /* Spooky typography. Creepster for display headings, Special Elite (a vintage
+     typewriter face) for the body. System fallbacks keep things readable offline. */
   --font-display: "Creepster", "Chiller", "Impact", system-ui, sans-serif;
   --font-body: "Special Elite", "Courier New", ui-monospace, monospace;
 
@@ -111,10 +90,24 @@
   }
 }
 
+/* Dropdown caret drawn with gradients, replacing daisyUI's select chevron. */
+@utility select-field {
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(1px + 50%),
+    calc(100% - 16px) calc(1px + 50%);
+  background-repeat: no-repeat;
+  background-size: 4px 4px, 4px 4px;
+}
+
 @layer base {
   html {
     font-family: var(--font-body);
     font-size: 15px;
+    /* Dark native controls (select menus, scrollbars), as the theme set before. */
+    color-scheme: dark;
   }
 
   body {

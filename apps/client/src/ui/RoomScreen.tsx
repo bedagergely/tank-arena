@@ -5,6 +5,7 @@ import type { GameRoom } from "../net/client.ts";
 import { Arena } from "./Arena.tsx";
 import { Chat } from "./Chat.tsx";
 import { PlayerList } from "./PlayerList.tsx";
+import { BTN, BTN_DEFAULT, BTN_GHOST, BTN_PRIMARY, BTN_SM, SELECT_SM } from "./controls.ts";
 
 interface Props {
   room: GameRoom;
@@ -34,7 +35,7 @@ export function RoomScreen({ room, onLeave }: Props) {
     return (
       <main className="relative z-10 mx-auto max-w-[1200px] px-6 py-4">
         <p className="text-error">{dropped}</p>
-        <button className="btn" onClick={onLeave}>
+        <button className={`${BTN} ${BTN_DEFAULT}`} onClick={onLeave}>
           Back to home
         </button>
       </main>
@@ -67,7 +68,7 @@ export function RoomScreen({ room, onLeave }: Props) {
           Room <span className="font-mono">{room.roomId}</span> · {map?.name ?? state.mapId} · {state.phase}
           {state.phase !== "lobby" && ` · round ${state.round}/${state.rounds}`}
         </span>
-        <button className="btn btn-ghost btn-sm" onClick={onLeave}>
+        <button className={`${BTN} ${BTN_GHOST} ${BTN_SM}`} onClick={onLeave}>
           Leave
         </button>
       </header>
@@ -84,7 +85,7 @@ export function RoomScreen({ room, onLeave }: Props) {
                 Best of
                 {isHost ? (
                   <select
-                    className="select select-sm w-auto"
+                    className={`${SELECT_SM} w-auto`}
                     value={state.rounds}
                     onChange={(e) => room.send("setRounds", { rounds: Number(e.target.value) })}
                   >
@@ -103,7 +104,7 @@ export function RoomScreen({ room, onLeave }: Props) {
                 <label className="inline-flex items-center gap-1.5 text-sm">
                   Bot
                   <select
-                    className="select select-sm w-auto"
+                    className={`${SELECT_SM} w-auto`}
                     value={botDifficulty}
                     onChange={(e) => setBotDifficulty(e.target.value as BotDifficulty)}
                     disabled={!canAddBot}
@@ -114,16 +115,16 @@ export function RoomScreen({ room, onLeave }: Props) {
                       </option>
                     ))}
                   </select>
-                  <button className="btn btn-sm" disabled={!canAddBot} onClick={() => room.send("addBot", { difficulty: botDifficulty })}>
+                  <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} disabled={!canAddBot} onClick={() => room.send("addBot", { difficulty: botDifficulty })}>
                     Add bot
                   </button>
                 </label>
               )}
-              <button className="btn" onClick={() => room.send("ready", { ready: !me.ready })}>
+              <button className={`${BTN} ${BTN_DEFAULT}`} onClick={() => room.send("ready", { ready: !me.ready })}>
                 {me.ready ? "Not ready" : "Ready"}
               </button>
               {isHost && (
-                <button className="btn btn-primary" disabled={!canStart} onClick={() => room.send("start", {})}>
+                <button className={`${BTN} ${BTN_PRIMARY}`} disabled={!canStart} onClick={() => room.send("start", {})}>
                   Start game
                 </button>
               )}

@@ -16,12 +16,14 @@ import { EngineSound, playBeep } from "./Sound.ts";
 export const SLOT_COLORS = [0x4fc3f7, 0xff8a65, 0x81c784, 0xffd54f, 0xba68c8, 0x90a4ae];
 
 const BG = 0x0d0a14;
-const FLOOR = 0x35313f;
-const FLOOR_DARK = 0x2a2733;
-const FLOOR_LIGHT = 0x403b4d;
-const FLOOR_SEAM = 0x1e1b28;
+const FLOOR = 0x726c80;
+const FLOOR_DARK = 0x655f73;
+const FLOOR_LIGHT = 0x7f798d;
+const FLOOR_SEAM = 0x484253;
 const WALL = 0x3f3752;
 const WALL_EDGE = 0x5c5170;
+/** Paving stones per gameplay tile; keeps the floor pattern finer than the tile grid. */
+const STONES_PER_TILE = 3;
 const TURRET = 0xff7a18;
 const CARVE = 0x241000;
 const BONE = 0xe8e0d0;
@@ -141,18 +143,19 @@ export class GameRenderer {
     const g = new Graphics();
     const { width, height } = this.map;
 
-    // Flagstone floor: fill with mortar, then lay tiles on the map grid with a
-    // little per-tile shade variation so the ground reads as dark stone.
+    // Flagstone floor: fill with mortar, then lay paving stones smaller than the
+    // gameplay tiles (with per-stone shade variation) so the ground reads as
+    // lighter stone without echoing the tile grid.
     g.rect(0, 0, width, height).fill(FLOOR_SEAM);
-    const ts = this.map.tileSize;
-    const seam = 1.5;
+    const stone = this.map.tileSize / STONES_PER_TILE;
+    const seam = 1;
     const rng = mulberry32(0x5eed);
-    for (let row = 0; row * ts < height; row++) {
-      for (let col = 0; col * ts < width; col++) {
-        const x = col * ts;
-        const y = row * ts;
-        const w = Math.min(ts, width - x) - seam;
-        const h = Math.min(ts, height - y) - seam;
+    for (let row = 0; row * stone < height; row++) {
+      for (let col = 0; col * stone < width; col++) {
+        const x = col * stone;
+        const y = row * stone;
+        const w = Math.min(stone, width - x) - seam;
+        const h = Math.min(stone, height - y) - seam;
         if (w <= 0 || h <= 0) continue;
         const shade = rng();
         const color = shade > 0.7 ? FLOOR_LIGHT : shade > 0.35 ? FLOOR : FLOOR_DARK;

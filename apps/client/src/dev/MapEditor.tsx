@@ -16,6 +16,7 @@ import {
   type MapSource,
 } from "@tank-arena/shared";
 import { SLOT_COLORS } from "../game/GameRenderer.ts";
+import { BTN, BTN_DEFAULT, BTN_GHOST, BTN_PRIMARY, BTN_SM, INPUT_SM, SELECT_SM } from "../ui/controls.ts";
 import {
   cellAt,
   cornerSpawns,
@@ -37,10 +38,10 @@ const TANK_RADIUS = DEFAULT_RULES.tank.radius;
 const MIN_TILES = 2;
 const MAX_TILES = 40;
 
-/* Editor palette mirrors the in-game renderer (dark stone ground, stone walls). */
-const EDITOR_FLOOR = "#35313f";
-const EDITOR_GRID = "#1e1b28";
-const EDITOR_WALL = "#453b5c";
+/* Editor palette mirrors the in-game renderer (light stone ground, stone walls). */
+const EDITOR_FLOOR = "#726c80";
+const EDITOR_GRID = "#57516a";
+const EDITOR_WALL = "#3f3752";
 
 const FIELD = "mb-2.5 flex flex-1 flex-col gap-1.5";
 
@@ -326,12 +327,12 @@ export function MapEditor() {
           <h3 className="mb-2.5 text-[0.95rem]">Map</h3>
           <label className={FIELD}>
             Name
-            <input className="input input-sm" value={map.name} onChange={(e) => commit({ ...map, name: e.target.value })} />
+            <input className={`${INPUT_SM} w-full`} value={map.name} onChange={(e) => commit({ ...map, name: e.target.value })} />
           </label>
           <label className={FIELD}>
             Id <span className="text-base-content/60">(file name; a-z, 0-9, -)</span>
             <input
-              className="input input-sm font-mono"
+              className={`${INPUT_SM} w-full font-mono`}
               value={map.id}
               onChange={(e) => commit({ ...map, id: e.target.value })}
               onBlur={() => commit({ ...map, id: slugify(map.id) })}
@@ -341,7 +342,7 @@ export function MapEditor() {
             <label className={FIELD}>
               Columns
               <input
-                className="input input-sm"
+                className={`${INPUT_SM} w-full`}
                 type="number"
                 min={MIN_TILES}
                 max={MAX_TILES}
@@ -352,7 +353,7 @@ export function MapEditor() {
             <label className={FIELD}>
               Rows
               <input
-                className="input input-sm"
+                className={`${INPUT_SM} w-full`}
                 type="number"
                 min={MIN_TILES}
                 max={MAX_TILES}
@@ -365,7 +366,7 @@ export function MapEditor() {
             <label className={FIELD}>
               Tile size
               <input
-                className="input input-sm"
+                className={`${INPUT_SM} w-full`}
                 type="number"
                 min={2 * TANK_RADIUS + 2}
                 step={4}
@@ -376,7 +377,7 @@ export function MapEditor() {
             <label className={FIELD}>
               Wall thickness
               <input
-                className="input input-sm"
+                className={`${INPUT_SM} w-full`}
                 type="number"
                 min={1}
                 value={t}
@@ -389,24 +390,24 @@ export function MapEditor() {
         <section className="border-t border-base-300 py-3">
           <h3 className="mb-2.5 text-[0.95rem]">Tools</h3>
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
-            <button className={`btn btn-sm ${tool === "wall" ? "btn-primary" : ""}`} onClick={() => setTool("wall")} title="Click a tile border to toggle a wall, drag to paint (W)">
+            <button className={`${BTN} ${BTN_SM} ${tool === "wall" ? BTN_PRIMARY : BTN_DEFAULT}`} onClick={() => setTool("wall")} title="Click a tile border to toggle a wall, drag to paint (W)">
               Wall
             </button>
-            <button className={`btn btn-sm ${tool === "spawn" ? "btn-primary" : ""}`} onClick={() => setTool("spawn")} title="Click a tile to add or remove a spawn (S)">
+            <button className={`${BTN} ${BTN_SM} ${tool === "spawn" ? BTN_PRIMARY : BTN_DEFAULT}`} onClick={() => setTool("spawn")} title="Click a tile to add or remove a spawn (S)">
               Spawn
             </button>
-            <button className="btn btn-sm" onClick={undo} disabled={past.length === 0}>
+            <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={undo} disabled={past.length === 0}>
               Undo
             </button>
-            <button className="btn btn-sm" onClick={redo} disabled={future.length === 0}>
+            <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={redo} disabled={future.length === 0}>
               Redo
             </button>
           </div>
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
-            <button className="btn btn-sm" onClick={clearWalls}>
+            <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={clearWalls}>
               Clear walls
             </button>
-            <button className="btn btn-sm" onClick={() => updateGrid((g) => ({ ...g, spawns: cornerSpawns(g) }))}>
+            <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={() => updateGrid((g) => ({ ...g, spawns: cornerSpawns(g) }))}>
               Corner spawns
             </button>
           </div>
@@ -421,19 +422,19 @@ export function MapEditor() {
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
             <label className={FIELD}>
               Seed
-              <input className="input input-sm" type="number" value={seed} onChange={(e) => setSeed(Number(e.target.value))} />
+              <input className={`${INPUT_SM} w-full`} type="number" value={seed} onChange={(e) => setSeed(Number(e.target.value))} />
             </label>
             <label className={FIELD}>
               Loops %
-              <input className="input input-sm" type="number" min={0} max={100} value={loops} onChange={(e) => setLoops(Number(e.target.value))} />
+              <input className={`${INPUT_SM} w-full`} type="number" min={0} max={100} value={loops} onChange={(e) => setLoops(Number(e.target.value))} />
             </label>
           </div>
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
-            <button className="btn btn-sm btn-primary" onClick={makeMaze}>
+            <button className={`${BTN} ${BTN_PRIMARY} ${BTN_SM}`} onClick={makeMaze}>
               Generate maze
             </button>
             <button
-              className="btn btn-sm"
+              className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`}
               onClick={() => {
                 setSeed(Math.floor(Math.random() * 100000));
               }}
@@ -454,11 +455,11 @@ export function MapEditor() {
             </ul>
           )}
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving || errors.length > 0}>
+            <button className={`${BTN} ${BTN_PRIMARY} ${BTN_SM}`} onClick={save} disabled={saving || errors.length > 0}>
               {saving ? "Saving…" : existsInSource ? "Save (overwrite)" : "Save as new map"}
             </button>
             {existsInSource && (
-              <button className="btn btn-sm btn-ghost" onClick={deleteMap}>
+              <button className={`${BTN} ${BTN_GHOST} ${BTN_SM}`} onClick={deleteMap}>
                 Delete from source
               </button>
             )}
@@ -471,7 +472,7 @@ export function MapEditor() {
           <h3 className="mb-2.5 text-[0.95rem]">Maps in source</h3>
           <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
             <select
-              className="select select-sm w-auto"
+              className={`${SELECT_SM} w-auto`}
               value={existsInSource ? map.id : ""}
               onChange={(e) => loadSource(sources.find((s) => s.id === e.target.value)!)}
             >
@@ -482,7 +483,7 @@ export function MapEditor() {
                 </option>
               ))}
             </select>
-            <button className="btn btn-sm" onClick={() => loadSource(EMPTY_MAP)}>
+            <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={() => loadSource(EMPTY_MAP)}>
               New
             </button>
           </div>
@@ -496,10 +497,10 @@ export function MapEditor() {
               onChange={(e) => setLayoutDraft(e.target.value)}
             />
             <div className="mb-2 flex flex-wrap items-end gap-2 [&>button]:mb-2.5">
-              <button className="btn btn-sm" onClick={applyLayoutText} disabled={layoutDraft === null || layoutDraft === map.layout.join("\n")}>
+              <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={applyLayoutText} disabled={layoutDraft === null || layoutDraft === map.layout.join("\n")}>
                 Apply layout
               </button>
-              <button className="btn btn-sm" onClick={() => setLayoutDraft(null)} disabled={layoutDraft === null}>
+              <button className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`} onClick={() => setLayoutDraft(null)} disabled={layoutDraft === null}>
                 Revert
               </button>
             </div>

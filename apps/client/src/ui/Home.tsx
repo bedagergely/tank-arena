@@ -3,6 +3,7 @@ import { useLobbyRoom } from "@colyseus/react";
 import { listMaps, DEFAULT_MAP_ID, MAX_NAME_LENGTH } from "@tank-arena/shared";
 import { isJoinable, joinLobby, LOBBY_FILTER, type JoinRequest, type ListingMetadata } from "../net/client.ts";
 import { Pumpkin } from "./Pumpkin.tsx";
+import { BTN, BTN_DEFAULT, BTN_PRIMARY, BTN_SM, CARD, CARD_BODY, INPUT, SELECT } from "./controls.ts";
 
 interface Props {
   onJoin: (request: JoinRequest) => void;
@@ -58,7 +59,7 @@ export function Home({ onJoin, busy, error }: Props) {
       <label className="mt-8 mb-4 flex flex-col gap-1.5">
         <span className="text-xs tracking-widest text-base-content/60 uppercase">Your name</span>
         <input
-          className="input w-full"
+          className={`${INPUT} w-full`}
           value={name}
           maxLength={MAX_NAME_LENGTH}
           placeholder="Anonymous"
@@ -68,12 +69,12 @@ export function Home({ onJoin, busy, error }: Props) {
       </label>
 
       <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
-        <form className="card border border-base-300 bg-base-200/80 shadow-lg shadow-black/30" onSubmit={onCreate}>
-          <div className="card-body gap-3 p-5">
+        <form className={CARD} onSubmit={onCreate}>
+          <div className={`${CARD_BODY} gap-3 p-5`}>
             <h2 className="font-display text-2xl text-primary">Create a room</h2>
             <label className="flex flex-col gap-1.5">
               <span className="text-xs tracking-widest text-base-content/60 uppercase">Map</span>
-              <select className="select w-full" value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
+              <select className={`${SELECT} w-full`} value={mapId} onChange={(e) => setMapId(e.target.value)} disabled={busy}>
                 {listMaps().map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
@@ -81,26 +82,26 @@ export function Home({ onJoin, busy, error }: Props) {
                 ))}
               </select>
             </label>
-            <button className="btn btn-primary mt-1" type="submit" disabled={busy}>
+            <button className={`${BTN} ${BTN_PRIMARY} mt-1`} type="submit" disabled={busy}>
               Create room
             </button>
           </div>
         </form>
 
-        <form className="card border border-base-300 bg-base-200/80 shadow-lg shadow-black/30" onSubmit={onJoinById}>
-          <div className="card-body gap-3 p-5">
+        <form className={CARD} onSubmit={onJoinById}>
+          <div className={`${CARD_BODY} gap-3 p-5`}>
             <h2 className="font-display text-2xl text-primary">Join a room</h2>
             <label className="flex flex-col gap-1.5">
               <span className="text-xs tracking-widest text-base-content/60 uppercase">Room ID</span>
               <input
-                className="input w-full"
+                className={`${INPUT} w-full`}
                 value={roomId}
                 placeholder="e.g. Ab3dEfGh1"
                 onChange={(e) => setRoomId(e.target.value)}
                 disabled={busy}
               />
             </label>
-            <button className="btn" type="submit" disabled={busy || !roomId.trim()}>
+            <button className={`${BTN} ${BTN_DEFAULT}`} type="submit" disabled={busy || !roomId.trim()}>
               Join by ID
             </button>
 
@@ -115,7 +116,7 @@ export function Home({ onJoin, busy, error }: Props) {
                     {r.metadata?.mapId ?? "?"} · {r.clients}/{r.maxClients}
                   </span>
                   <button
-                    className="btn btn-sm"
+                    className={`${BTN} ${BTN_DEFAULT} ${BTN_SM}`}
                     type="button"
                     disabled={busy}
                     onClick={() => run({ kind: "join", roomId: r.roomId, options: opts() })}

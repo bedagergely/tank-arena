@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { useRoomMessage } from "@colyseus/react";
 import { MAX_CHAT_LENGTH } from "@tank-arena/shared";
 import type { GameRoom } from "../net/client.ts";
+import { BTN, BTN_PRIMARY, BTN_SM, CARD, CARD_BODY, INPUT_SM } from "./controls.ts";
 
 interface Props {
   room: GameRoom;
@@ -44,8 +45,8 @@ export function Chat({ room }: Props) {
   }
 
   return (
-    <section className="card border border-base-300 bg-base-200/80 shadow-lg shadow-black/30">
-      <div className="card-body p-3">
+    <section className={CARD}>
+      <div className={`${CARD_BODY} gap-2 p-3`}>
         <h3 className="mb-2 font-display text-lg text-primary">Chat</h3>
         <ul ref={listRef} className="m-0 flex h-[260px] list-none flex-col gap-1 overflow-y-auto p-0 pr-1 text-[0.92rem]">
           {feed.map((m) =>
@@ -62,13 +63,13 @@ export function Chat({ room }: Props) {
         </ul>
         <form className="mt-2 flex gap-1.5" onSubmit={onSubmit}>
           <input
-            className="input input-sm flex-1"
+            className={`${INPUT_SM} flex-1`}
             value={draft}
             maxLength={MAX_CHAT_LENGTH}
             placeholder="Say something…"
             onChange={(e) => setDraft(e.target.value)}
           />
-          <button className="btn btn-primary btn-sm" type="submit" disabled={!draft.trim()}>
+          <button className={`${BTN} ${BTN_PRIMARY} ${BTN_SM}`} type="submit" disabled={!draft.trim()}>
             Send
           </button>
         </form>
