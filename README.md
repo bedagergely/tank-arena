@@ -67,7 +67,8 @@ In production the server serves `apps/client/dist` itself and the client connect
 to the origin it was loaded from, so a single port hosts the game. Set
 `VITE_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
 the client is hosted elsewhere. The Colyseus monitor is at
-`http://localhost:2567/monitor` outside production.
+`http://localhost:2567/monitor` (in production it is only mounted when
+`MONITOR_PASSWORD` is set, behind basic auth — see [DEPLOY.md](DEPLOY.md)).
 
 ## Deployment
 

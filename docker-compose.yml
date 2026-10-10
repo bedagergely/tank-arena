@@ -6,6 +6,9 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Set MONITOR_PASSWORD to enable the /monitor panel behind basic auth.
+      MONITOR_USER: ${MONITOR_USER:-admin}
+      MONITOR_PASSWORD: ${MONITOR_PASSWORD:-}
     expose:
       - "2567"
 

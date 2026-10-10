@@ -102,9 +102,31 @@ for a reference.
 | `STAGING`         | `.env`               | Use the Let's Encrypt staging CA in `init-tls.sh`             |
 | `PORT`            | `game` environment   | Server port (default 2567; nginx proxies to it)               |
 | `CLIENT_DIR`      | `game` environment   | Override the static client directory                          |
+| `MONITOR_USER`    | `game` environment   | Basic-auth user for `/monitor` (default `admin`)              |
+| `MONITOR_PASSWORD`| `game` environment   | Enables `/monitor` behind basic auth; unset keeps it disabled |
 | `VITE_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
 
-`/monitor` is disabled when `NODE_ENV=production` (the image sets it).
+## Monitoring panel
+
+The [Colyseus monitoring panel](https://docs.colyseus.io/tools/monitoring) lists live
+rooms and clients and can inspect, message, or disconnect them. It is always available
+in development at `/monitor` with no auth.
+
+In production it is only mounted when `MONITOR_PASSWORD` is set, and is then gated
+behind HTTP basic auth. Set both variables in `.env` (see `.env.example`) and
+recreate the `game` service:
+
+```dotenv
+MONITOR_USER=admin          # optional, defaults to admin
+MONITOR_PASSWORD=change-me  # required to expose the panel
+```
+
+```sh
+docker compose up -d game   # picks up the new environment
+```
+
+Then open `http://<host>/monitor` and sign in. Without `MONITOR_PASSWORD` the panel is
+not mounted at all, so a production deploy can never expose it unprotected.
 
 ## Scaling notes
 
