@@ -20,6 +20,7 @@ browser ──443──> nginx ──2567──> game (node)
 - A Linux VPS with [Docker Engine + Compose plugin](https://docs.docker.com/engine/install/)
 - Port 80 open in the provider firewall / `ufw` (plus 443 for HTTPS)
 - For HTTPS: a DNS `A`/`AAAA` record for your domain pointing at the VPS
+- Optional: port 19999 open if you want to reach the Netdata dashboard remotely
 
 ## First deploy (HTTP)
 
@@ -78,6 +79,40 @@ docker compose exec nginx nginx -t   # validate the rendered nginx config
 Certificates live in `deploy/certbot/conf` (git-ignored); back that directory up
 if you want to avoid re-issuing on a rebuild of the host.
 
+## Monitoring with Netdata
+
+`docker-compose.yml` also runs [Netdata](https://www.netdata.cloud/) for host and
+container metrics. It uses host networking, so its dashboard is on port 19999
+directly — it is not proxied through nginx:
+
+```
+browser ──19999──> netdata (host network)
+```
+
+```sh
+docker compose up -d netdata       # started by the normal `up -d` too
+# then open http://<host>:19999
+```
+
+To appear in Netdata Cloud, set the claim values in `.env` (copy them from the
+Cloud UI under **Space → Nodes → Connect**) and recreate the container:
+
+```dotenv
+NETDATA_CLAIM_TOKEN=...
+NETDATA_CLAIM_ROOMS=...
+# NETDATA_CLAIM_URL defaults to https://app.netdata.cloud
+```
+
+```sh
+docker compose up -d netdata       # re-reads .env and re-claims the node
+```
+
+Without the claim values it still runs as a local-only dashboard. Metrics persist
+in the `netdataconfig` / `netdatalib` / `netdatacache` named volumes. Note the
+container runs with `pid: host`, `SYS_ADMIN`/`SYS_PTRACE`, `apparmor:unconfined`,
+and a read-only Docker socket — that is what lets it read host-level metrics, but
+it is a broad privilege set; remove the service if you don't need monitoring.
+
 ## Without Nginx
 
 The image alone is enough for a LAN or behind an existing reverse proxy:
@@ -100,6 +135,9 @@ for a reference.
 | `COMPOSE_FILE`    | `.env`               | `docker-compose.yml:docker-compose.tls.yml` enables HTTPS     |
 | `EMAIL`           | `.env`               | Let's Encrypt account address for `init-tls.sh`               |
 | `STAGING`         | `.env`               | Use the Let's Encrypt staging CA in `init-tls.sh`             |
+| `NETDATA_CLAIM_TOKEN` | `.env`           | Netdata Cloud claim token (optional; local dashboard works without it) |
+| `NETDATA_CLAIM_ROOMS` | `.env`           | Netdata Cloud space room ID                                   |
+| `NETDATA_CLAIM_URL`   | `.env`           | Netdata Cloud URL (default `https://app.netdata.cloud`)       |
 | `PORT`            | `game` environment   | Server port (default 2567; nginx proxies to it)               |
 | `CLIENT_DIR`      | `game` environment   | Override the static client directory                          |
 | `VITE_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
