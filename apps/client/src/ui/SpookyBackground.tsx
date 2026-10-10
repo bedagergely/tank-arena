@@ -12,9 +12,27 @@ function Bat({ className }: { className?: string }) {
   );
 }
 
+/** A pale, sheet-like ghost with hollow eyes. */
+function Ghost({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 100 100" className={className} aria-hidden="true" focusable="false">
+      <path
+        d="M50 8C29 8 14 26 14 50v44c2-5 7-8 12-8s10 8 15 8 10-8 15-8 10 8 15 8 10-8 15-8V50C86 26 71 8 50 8z"
+        fill="currentColor"
+      />
+      <g fill="#0e0a17">
+        <ellipse cx="38" cy="48" rx="5" ry="7" />
+        <ellipse cx="62" cy="48" rx="5" ry="7" />
+        <ellipse cx="50" cy="66" rx="5.5" ry="8" />
+      </g>
+    </svg>
+  );
+}
+
 /**
  * Fixed, non-interactive Halloween backdrop: a hazy moon, floating pumpkins,
- * drifting bats and rising embers. Sits behind the app content (which uses z-10).
+ * drifting bats, spooky white ghosts and rising embers. Sits behind the app
+ * content (which uses z-10).
  */
 export function SpookyBackground() {
   return (
@@ -27,6 +45,12 @@ export function SpookyBackground() {
       <Pumpkin className="absolute -right-10 bottom-[12%] h-56 w-56 opacity-15 animate-float" />
       <Pumpkin className="absolute left-[14%] bottom-[6%] h-24 w-24 opacity-25 animate-float-slow" />
       <Pumpkin className="absolute right-[22%] top-[10%] h-16 w-16 opacity-20 animate-float" />
+
+      {/* spooky white ghosts */}
+      <Ghost className="absolute left-[7%] top-[30%] h-28 w-28 text-white/15 animate-float" />
+      <Ghost className="absolute right-[11%] top-[52%] h-36 w-36 text-white/10 animate-float-slow [animation-delay:-3s]" />
+      <Ghost className="absolute left-[46%] bottom-[14%] h-20 w-20 text-white/10 animate-float [animation-delay:-5s]" />
+      <Ghost className="absolute right-[34%] top-[6%] h-16 w-16 text-white/10 animate-float-slow [animation-delay:-8s]" />
 
       {/* bats */}
       <Bat className="absolute left-[28%] top-[18%] h-5 w-10 text-secondary/40 animate-drift" />
