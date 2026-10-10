@@ -104,6 +104,9 @@ for a reference.
 | `CLIENT_DIR`      | `game` environment   | Override the static client directory                          |
 | `MONITOR_USER`    | `game` environment   | Basic-auth user for `/monitor` (default `admin`)              |
 | `MONITOR_PASSWORD`| `game` environment   | Enables `/monitor` behind basic auth; unset keeps it disabled |
+| `ADMIN_USER`      | `game` environment   | Basic-auth user for `/admin` (default `admin`)                |
+| `ADMIN_PASSWORD`  | `game` environment   | Enables `/admin` behind basic auth; unset keeps it disabled   |
+| `ADMIN_SNAPSHOT_DIR` | `game` environment | Where `/admin` writes profiles (default: temp dir)          |
 | `VITE_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
 
 ## Monitoring panel
@@ -127,6 +130,35 @@ docker compose up -d game   # picks up the new environment
 
 Then open `http://<host>/monitor` and sign in. Without `MONITOR_PASSWORD` the panel is
 not mounted at all, so a production deploy can never expose it unprotected.
+
+## Profiling panel
+
+`/admin` is a small page that records CPU profiles, heap snapshots and sampling heap
+profiles with Node's built-in inspector, then lists them for download. It is always
+available in development at `/admin` with no auth.
+
+Like the monitor, in production it is only mounted when `ADMIN_PASSWORD` is set, and is
+then gated behind HTTP basic auth:
+
+```dotenv
+ADMIN_USER=admin            # optional, defaults to admin
+ADMIN_PASSWORD=change-me    # required to expose the panel
+ADMIN_SNAPSHOT_DIR=/tmp/tank-arena-snapshots   # optional
+```
+
+```sh
+docker compose up -d game   # picks up the new environment
+```
+
+Then open `http://<host>/admin`, sign in, and use the buttons:
+
+- **Start/Stop CPU profiling** writes a `.cpuprofile` (open it in Chrome DevTools'
+  Performance tab).
+- **Start/Stop heap sampling** writes a `.heapprofile` (DevTools Memory tab, "Load").
+- **Take heap snapshot** writes a `.heapsnapshot` (DevTools Memory tab).
+
+Snapshots land in `ADMIN_SNAPSHOT_DIR` and stay until you delete them; the page only
+serves names it recorded. Without `ADMIN_PASSWORD` the panel is not mounted at all.
 
 ## Scaling notes
 
