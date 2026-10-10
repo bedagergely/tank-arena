@@ -58,6 +58,10 @@ sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep 
   `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Vite dev
   server only — commit the generated files.
 - Never commit secrets. `.env` is gitignored; `.env.example` documents the variables.
+- `.env` is only read by the *server process* via `@colyseus/tools` (and by `docker compose` for
+  `${VAR}` substitution) — Docker does not inject it into the container. Any env-gated server
+  feature (`MONITOR_*`, `ADMIN_*`, ...) must also be forwarded in the `game` service
+  `environment:` in `docker-compose.yml`, or it never reaches the container in production.
 - Add or update tests for behavior changes, especially in the shared engine and server rooms.
 
 ## Git workflow
