@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineServer, defineRoom, monitor, LobbyRoom } from "colyseus";
+import { defineServer, defineRoom, LobbyRoom } from "colyseus";
 import express from "express";
 import { listMaps } from "@tank-arena/shared";
 import { gameRoom } from "./rooms/GameRoom.ts";
+import { monitorMiddleware } from "./monitor.ts";
 
 export const GAME_ROOM = "game";
 
@@ -21,8 +22,13 @@ const server = defineServer({
       res.json(listMaps().map((m) => ({ id: m.id, name: m.name, width: m.width, height: m.height })));
     });
 
-    if (process.env.NODE_ENV !== "production") {
-      app.use("/monitor", monitor());
+    // Open in development; in production only when MONITOR_PASSWORD is set,
+    // where it is then gated behind basic auth.
+    const monitorPanel = monitorMiddleware();
+    if (monitorPanel) {
+      app.use("/monitor", monitorPanel);
+    } else {
+      console.warn("[monitor] disabled: set MONITOR_PASSWORD to expose the /monitor panel");
     }
 
     if (existsSync(CLIENT_DIR)) {
