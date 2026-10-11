@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { MetricsSnapshot } from "@tank-arena/server/metrics";
 import type { SnapshotInfo } from "@tank-arena/server/profiler";
 import { BTN, BTN_DEFAULT, BTN_PRIMARY, BTN_SM, CARD, CARD_BODY } from "../ui/controls.ts";
 import { CpuGauge, MemoryGauge } from "./Gauges.tsx";
+import { SummaryView, type InspectState } from "./SummaryView.tsx";
 import { formatBytes } from "./format.ts";
+import { summarize } from "./summarize.ts";
 import {
   getMetrics,
   getStatus,
@@ -30,6 +32,17 @@ const KIND_LABELS: Record<SnapshotInfo["kind"], string> = {
 const IDLE: AdminStatus = { cpuRunning: false, heapSamplingRunning: false };
 const POLL_MS = 1000;
 
+/**
+ * Parsing happens in this tab, which is fine for the usual profile sizes but
+ * would wedge the browser on a multi-hundred-megabyte heap snapshot. Past this
+ * point we send the operator to DevTools instead, which streams them.
+ */
+const INSPECT_LIMIT_BYTES = 100 * 1024 * 1024;
+
+interface Inspect extends InspectState {
+  name: string;
+}
+
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -49,6 +62,7 @@ export function AdminPanel() {
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [inspect, setInspect] = useState<Inspect | null>(null);
 
   const cpuRecording = metrics?.cpu.recording === true;
   const memoryRecording = metrics?.memory.recording === true;
@@ -110,6 +124,31 @@ export function AdminPanel() {
 
   const toggle = (running: boolean, start: () => Promise<unknown>, stop: () => Promise<unknown>, what: string) =>
     run(`${running ? "Stopping" : "Starting"} ${what}`, running ? stop : start);
+
+  async function toggleInspect(entry: SnapshotInfo) {
+    if (inspect?.name === entry.name) {
+      setInspect(null);
+      return;
+    }
+    if (entry.size > INSPECT_LIMIT_BYTES) {
+      setInspect({
+        name: entry.name,
+        loading: false,
+        summary: null,
+        error: `Too large to parse in the browser (${formatBytes(entry.size)}). Download it and open it in Chrome DevTools instead.`,
+      });
+      return;
+    }
+
+    setInspect({ name: entry.name, loading: true, summary: null, error: null });
+    try {
+      const res = await fetch(snapshotUrl(entry.name));
+      if (!res.ok) throw new Error(`Could not read the profile (${res.status})`);
+      setInspect({ name: entry.name, loading: false, summary: summarize(entry.kind, await res.json()), error: null });
+    } catch (err) {
+      setInspect({ name: entry.name, loading: false, summary: null, error: describe(err) });
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
@@ -192,17 +231,34 @@ export function AdminPanel() {
             </thead>
             <tbody>
               {snapshots.map((entry) => (
-                <tr key={entry.name} className="border-b border-base-300/50 last:border-0">
-                  <td className="break-all p-2">{entry.name}</td>
-                  <td className="p-2 whitespace-nowrap">{KIND_LABELS[entry.kind]}</td>
-                  <td className="p-2 text-right tabular-nums">{formatBytes(entry.size)}</td>
-                  <td className="p-2 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
-                  <td className="p-2">
-                    <a className="text-primary underline" href={snapshotUrl(entry.name)} download={entry.name}>
-                      Download
-                    </a>
-                  </td>
-                </tr>
+                <Fragment key={entry.name}>
+                  <tr className="border-b border-base-300/50 last:border-0">
+                    <td className="break-all p-2">{entry.name}</td>
+                    <td className="p-2 whitespace-nowrap">{KIND_LABELS[entry.kind]}</td>
+                    <td className="p-2 text-right tabular-nums">{formatBytes(entry.size)}</td>
+                    <td className="p-2 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                    <td className="p-2 whitespace-nowrap">
+                      <button
+                        className="cursor-pointer text-primary underline disabled:cursor-progress disabled:opacity-60"
+                        disabled={inspect?.name === entry.name && inspect.loading}
+                        onClick={() => void toggleInspect(entry)}
+                      >
+                        {inspect?.name === entry.name ? "Hide" : "Inspect"}
+                      </button>
+                      <span className="mx-2 text-base-content/30">·</span>
+                      <a className="text-primary underline" href={snapshotUrl(entry.name)} download={entry.name}>
+                        Download
+                      </a>
+                    </td>
+                  </tr>
+                  {inspect?.name === entry.name && (
+                    <tr className="border-b border-base-300/50">
+                      <td className="bg-base-100/50 p-3" colSpan={5}>
+                        <SummaryView state={inspect} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {snapshots.length === 0 && (
                 <tr>

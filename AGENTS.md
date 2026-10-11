@@ -33,7 +33,7 @@ these supply-chain guards; if a dependency fails to install, escalate instead of
 
 | Command          | What it does                                                        |
 | ---------------- | ------------------------------------------------------------------- |
-| `pnpm test`      | Vitest for `packages/shared` + `apps/server`                        |
+| `pnpm test`      | Vitest for `packages/shared`, `apps/server` and `apps/client`        |
 | `pnpm typecheck` | `tsc --noEmit` across all workspaces                                |
 | `pnpm lint`      | ESLint over the whole repo                                          |
 | `pnpm build`     | `apps/server/build/index.js` and `apps/client/dist/`                |
@@ -44,6 +44,8 @@ runs exactly these plus `pnpm build`, so a change that fails them will not merge
 
 Server test files boot a Colyseus server on `@colyseus/testing`'s fixed port, so they run
 sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep it that way.
+The client's `vitest.config.ts` deliberately skips the React/Tailwind plugins — it is for
+pure logic (`src/admin/summarize.ts` and friends), not component tests.
 
 ## Conventions
 
