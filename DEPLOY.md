@@ -153,7 +153,10 @@ docker compose up -d game   # picks up the new environment
 Then open `http://<host>/admin`, sign in, and use the buttons:
 
 - **Start/Stop CPU profiling** writes a `.cpuprofile` (open it in Chrome DevTools'
-  Performance tab).
+  Performance tab). Frames are mapped back to the original TypeScript through the
+  `build/index.js.map` the server build emits, since DevTools cannot attach a source
+  map to an imported profile itself. If the map is missing the raw bundle positions
+  are kept.
 - **Start/Stop heap sampling** writes a `.heapprofile` (DevTools Memory tab, "Load").
 - **Take heap snapshot** writes a `.heapsnapshot` (DevTools Memory tab).
 

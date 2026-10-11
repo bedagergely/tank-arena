@@ -1,6 +1,7 @@
 import { Session } from "node:inspector";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { remapProfile, type CpuProfile } from "./sourcemap.ts";
 
 export type SnapshotKind = "cpu" | "heap" | "heapsampling";
 
@@ -115,12 +116,10 @@ export function createInspectorProfiler(dir: string): Profiler {
       const session = cpuSession;
       if (!session) throw new ProfilerStateError("CPU profiling is not running");
       cpuSession = null;
-      try {
-        const { profile } = await post<{ profile: unknown }>(session, "Profiler.stop");
-        return await record("cpu", JSON.stringify(profile));
-      } finally {
-        session.disconnect();
-      }
+      const { profile } = await post<{ profile: CpuProfile }>(session, "Profiler.stop").finally(() =>
+        session.disconnect(),
+      );
+      return await record("cpu", JSON.stringify(await remapProfile(profile)));
     },
 
     async takeHeapSnapshot() {

@@ -245,6 +245,9 @@ importers:
       '@colyseus/tools':
         specifier: ^0.18.2
         version: 0.18.3(@colyseus/core@0.18.12)(@colyseus/ws-transport@0.18.2)(supports-color@7.2.0)
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
       '@tank-arena/shared':
         specifier: workspace:*
         version: link:../../packages/shared
