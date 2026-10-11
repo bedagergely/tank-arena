@@ -78,6 +78,37 @@ describe("summarizeCpuProfile", () => {
     expect(summary.stats[1]).toEqual({ label: "Samples", value: "0" });
   });
 
+  it("reports V8's synthetic frames as percentages, not functions", () => {
+    const profile = {
+      nodes: [
+        { id: 1, callFrame: { functionName: "(idle)", url: "", lineNumber: -1 }, hitCount: 0 },
+        { id: 2, callFrame: { functionName: "(garbage collector)", url: "", lineNumber: -1 }, hitCount: 0 },
+        { id: 3, callFrame: { functionName: "(program)", url: "", lineNumber: -1 }, hitCount: 0 },
+        { id: 4, callFrame: { functionName: "writev", url: "", lineNumber: -1 }, hitCount: 0 },
+        { id: 5, callFrame: { functionName: "tick", url: "file:///app/src/loop.ts", lineNumber: 9 }, hitCount: 0 },
+      ],
+      samples: [1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 4, 5],
+      timeDeltas: [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 500, 500, 500, 500],
+      startTime: 0,
+      endTime: 8500,
+    };
+
+    const summary = summarizeCpuProfile(profile);
+    const stats = Object.fromEntries(summary.stats.map((stat) => [stat.label, stat.value]));
+    expect(stats["Idle"]).toBe("80.0%");
+    expect(stats["GC"]).toBe("5.0%");
+    expect(stats["VM"]).toBe("5.0%");
+    // Only the two real functions are counted, and only they are listed.
+    expect(stats["Functions"]).toBe("2");
+
+    const rows = summary.sections[0]!.rows;
+    expect(rows.map((row) => row.name)).toEqual(["writev", "tick"]);
+    expect(rows.some((row) => row.name.startsWith("("))).toBe(false);
+    // writev has no script URL because it is C++.
+    expect(rows[0]!.detail).toBe("native");
+    expect(rows[0]!.share).toBe(500 / 10000);
+  });
+
   it("rejects something that is not a CPU profile", () => {
     expect(() => summarizeCpuProfile({ nope: true })).toThrow(/CPU profile/);
   });
@@ -150,6 +181,26 @@ describe("summarizeHeapProfile", () => {
       node = { callFrame: { functionName: `f${i}`, url: "f.ts", lineNumber: i }, selfSize: 0, children: [node] };
     }
     expect(summarizeHeapProfile({ head: node }).stats[0]!.value).toBe("64 B");
+  });
+
+  it("labels V8's synthetic frames apart from native code", () => {
+    const summary = summarizeHeapProfile({
+      head: {
+        callFrame: { functionName: "(root)", url: "", lineNumber: -1 },
+        selfSize: 512,
+        children: [
+          {
+            callFrame: { functionName: "decode", url: "file:///app/src/decode.ts", lineNumber: 9 },
+            selfSize: 1024,
+            children: [],
+          },
+        ],
+      },
+    });
+
+    const rows = summary.sections[0]!.rows;
+    expect(rows[0]).toMatchObject({ name: "decode", detail: "/app/src/decode.ts:10" });
+    expect(rows[1]).toMatchObject({ name: "(root)", detail: "v8 internal" });
   });
 
   it("rejects something that is not a heap sampling profile", () => {

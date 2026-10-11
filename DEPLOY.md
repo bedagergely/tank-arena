@@ -179,9 +179,11 @@ page happens to poll; stopping the card stops the timer.
 Every row also has an **Inspect** button that reads the profile in the page and shows its
 headline numbers plus the biggest consumers — self time per function for a CPU profile,
 shallow size per node name and per node type for a heap snapshot, and bytes allocated per
-function for a sampling profile. Parsing happens in your browser, so the game process is
-never blocked; anything over 100 MB is refused with a pointer to DevTools instead, which
-streams them.
+function for a sampling profile. V8's `(idle)`, `(program)` and `(garbage collector)`
+frames are not functions, so a CPU profile reports them as Idle/VM/GC percentages instead
+of burying the real functions underneath them. Parsing happens in your browser, so the
+game process is never blocked; anything over 100 MB is refused with a pointer to DevTools
+instead, which streams them.
 
 Snapshots land in `ADMIN_SNAPSHOT_DIR` and stay until you delete them; the page only
 serves names it recorded. Without `ADMIN_PASSWORD` the panel is not mounted at all.

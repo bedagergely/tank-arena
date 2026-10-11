@@ -30,6 +30,15 @@ const TOP_TYPES = 8;
 
 const ANONYMOUS = "(anonymous)";
 
+/**
+ * V8 injects these "meta" nodes next to real call frames. None of them is a
+ * function: `(idle)` is time the event loop spent waiting for work, `(program)`
+ * is VM work that did not come from JavaScript, and `(garbage collector)` is
+ * GC. DevTools keeps them out of application self time, so they are reported as
+ * percentages rather than listed as the hottest "functions".
+ */
+const META_FRAMES = new Set(["(root)", "(idle)", "(program)", "(garbage collector)"]);
+
 interface CallFrame {
   functionName?: unknown;
   url?: unknown;
@@ -76,9 +85,14 @@ function frameName(frame: CallFrame): string {
   return typeof frame.functionName === "string" && frame.functionName !== "" ? frame.functionName : ANONYMOUS;
 }
 
+function isMetaFrame(name: string): boolean {
+  return META_FRAMES.has(name);
+}
+
 function frameLocation(frame: CallFrame): string {
   const url = typeof frame.url === "string" ? frame.url : "";
-  if (url === "") return "native";
+  // No script URL means C++ code — unless it is one of V8's synthetic frames.
+  if (url === "") return isMetaFrame(frameName(frame)) ? "v8 internal" : "native";
   const line = typeof frame.lineNumber === "number" && frame.lineNumber >= 0 ? `:${frame.lineNumber + 1}` : "";
   return `${shortenPath(url)}${line}`;
 }
@@ -114,17 +128,35 @@ export function summarizeCpuProfile(input: unknown): ProfileSummary {
 
   const byFunction = new Map<string, Tally>();
   const frames = new Map<string, CallFrame>();
-  let total = 0;
+  const metaMicros = new Map<string, number>();
+  let application = 0;
+  let meta = 0;
   for (const node of nodes) {
     const micros = selfMicros.get(node.id as number) ?? 0;
     if (micros <= 0) continue;
     const frame = asRecord(node.callFrame) as CallFrame | null;
     if (frame === null) continue;
+
+    const name = frameName(frame);
+    if (isMetaFrame(name)) {
+      metaMicros.set(name, (metaMicros.get(name) ?? 0) + micros);
+      meta += micros;
+      continue;
+    }
+
     const key = frameKey(frame);
     add(byFunction, key, micros);
     frames.set(key, frame);
-    total += micros;
+    application += micros;
   }
+
+  // Shares are of everything that was sampled, so "Idle 69%" and "post 4%" are
+  // read on the same scale.
+  const profiled = application + meta;
+  const metaStat = (frame: string, label: string): SummaryStat[] => {
+    const micros = metaMicros.get(frame) ?? 0;
+    return micros > 0 && profiled > 0 ? [{ label, value: `${((micros / profiled) * 100).toFixed(1)}%` }] : [];
+  };
 
   const rows = [...byFunction.entries()]
     .sort((a, b) => b[1].size - a[1].size)
@@ -135,7 +167,7 @@ export function summarizeCpuProfile(input: unknown): ProfileSummary {
         name: truncate(frameName(frame), 48),
         detail: frameLocation(frame),
         value: formatMicros(tally.size),
-        share: total > 0 ? tally.size / total : 0,
+        share: profiled > 0 ? tally.size / profiled : 0,
       };
     });
 
@@ -144,9 +176,12 @@ export function summarizeCpuProfile(input: unknown): ProfileSummary {
       { label: "Recorded", value: formatMicros(duration) },
       { label: "Samples", value: samples.length.toLocaleString() },
       { label: "Functions", value: byFunction.size.toLocaleString() },
+      ...metaStat("(idle)", "Idle"),
+      ...metaStat("(garbage collector)", "GC"),
+      ...metaStat("(program)", "VM"),
     ],
     sections: [{ title: "Hottest functions", rows }],
-    note: "Time is self time — a function's own work, excluding everything it called.",
+    note: "Time is self time — a function's own work, excluding everything it called. Idle, GC and VM are V8's own categories, not functions, so they are reported as percentages.",
   };
 }
 
