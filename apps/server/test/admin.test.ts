@@ -5,10 +5,13 @@ import { join } from "node:path";
 import express from "express";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
-import { adminMiddleware, resolveAdminConfig } from "../src/admin.ts";
+import { adminMiddleware, resolveAdminConfig, type AdminOptions } from "../src/admin.ts";
 import { createInspectorProfiler, type Profiler, type SnapshotInfo } from "../src/profiler.ts";
 
 const basic = (credentials: string) => `Basic ${Buffer.from(credentials).toString("base64")}`;
+
+const PROD: NodeJS.ProcessEnv = { NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" };
+const auth = { authorization: basic("admin:s3cret") };
 
 const sample: SnapshotInfo = {
   name: "cpu-2026-01-01T00-00-00-000Z.cpuprofile",
@@ -88,15 +91,17 @@ describe("resolveAdminConfig", () => {
 
 describe("admin panel", () => {
   const servers: Server[] = [];
+  const dirs: string[] = [];
 
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => server.close(resolve))));
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
   /** Mount the panel exactly like app.config.ts does, on an ephemeral port. */
-  async function listen(env: NodeJS.ProcessEnv, profiler: Profiler): Promise<string> {
+  async function listen(options: AdminOptions): Promise<string> {
     const app = express();
-    const panel = adminMiddleware(env, profiler);
+    const panel = adminMiddleware(options);
     if (panel) app.use("/admin", panel);
 
     const server = createServer(app);
@@ -107,39 +112,52 @@ describe("admin panel", () => {
     return `http://127.0.0.1:${address.port}`;
   }
 
-  const auth = { authorization: basic("admin:s3cret") };
+  /** Stand-in for the built client: the panel only needs `admin.html` from it. */
+  async function builtClient(html: string): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "tank-client-"));
+    dirs.push(dir);
+    await writeFile(join(dir, "admin.html"), html);
+    return dir;
+  }
 
   it("does not mount the panel in production without a password", async () => {
-    const base = await listen({ NODE_ENV: "production" }, fakeProfiler());
+    const base = await listen({ env: { NODE_ENV: "production" }, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/status`);
     expect(res.status).toBe(404);
   });
 
   it("rejects unauthenticated requests once a password is set", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/status`);
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toContain("Basic");
   });
 
   it("rejects the wrong password", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/status`, { headers: { authorization: basic("admin:wrong") } });
     expect(res.status).toBe(401);
   });
 
-  it("serves the HTML panel to the configured credentials", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+  it("serves the client-built page to the configured credentials", async () => {
+    const clientDir = await builtClient("<!doctype html><title>Profiling</title>");
+    const base = await listen({ env: PROD, profiler: fakeProfiler(), clientDir });
+
     const res = await fetch(`${base}/admin/`, { headers: auth });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
-    const html = await res.text();
-    expect(html).toContain("Start CPU profiling");
-    expect(html).toContain("Take heap snapshot");
+    expect(await res.text()).toContain("Profiling");
+  });
+
+  it("explains itself when the client has not been built", async () => {
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
+    const res = await fetch(`${base}/admin/`, { headers: auth });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toContain("not built");
   });
 
   it("drives the CPU profiler and reports status", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
 
     const start = await fetch(`${base}/admin/cpu/start`, { method: "POST", headers: auth });
     expect(start.status).toBe(200);
@@ -154,7 +172,7 @@ describe("admin panel", () => {
   });
 
   it("drives the heap profilers", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
 
     const snapshot = await fetch(`${base}/admin/heap/snapshot`, { method: "POST", headers: auth });
     expect(await snapshot.json()).toEqual({ snapshot: sample });
@@ -167,13 +185,13 @@ describe("admin panel", () => {
   });
 
   it("lists recorded snapshots", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/snapshots`, { headers: auth });
     expect(await res.json()).toEqual({ snapshots: [sample] });
   });
 
   it("refuses to download names it did not record", async () => {
-    const base = await listen({ NODE_ENV: "production", ADMIN_PASSWORD: "s3cret" }, fakeProfiler());
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/snapshots/${encodeURIComponent("../etc/passwd")}`, { headers: auth });
     expect(res.status).toBe(404);
   });
@@ -194,10 +212,10 @@ describe("admin panel downloads", () => {
     await writeFile(join(dir, "cpu-test.cpuprofile"), "PROFILE");
 
     const app = express();
-    const panel = adminMiddleware(
-      { NODE_ENV: "production", ADMIN_PASSWORD: "s3cret", ADMIN_SNAPSHOT_DIR: dir },
-      createInspectorProfiler(dir),
-    );
+    const panel = adminMiddleware({
+      env: { ...PROD, ADMIN_SNAPSHOT_DIR: dir },
+      profiler: createInspectorProfiler(dir),
+    });
     if (panel) app.use("/admin", panel);
 
     const server = createServer(app);
@@ -207,7 +225,7 @@ describe("admin panel downloads", () => {
     if (address === null || typeof address === "string") throw new Error("server has no port");
 
     const res = await fetch(`http://127.0.0.1:${address.port}/admin/snapshots/cpu-test.cpuprofile`, {
-      headers: { authorization: basic("admin:s3cret") },
+      headers: auth,
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain("cpu-test.cpuprofile");

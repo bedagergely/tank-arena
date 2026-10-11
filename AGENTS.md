@@ -54,6 +54,10 @@ sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep 
   existing comments.
 - Keep game rules, map data, and simulation in `packages/shared`; keep all authority and validation
   on the server. The client only renders and sends intents.
+- The client builds two pages from one Vite config: the game (`index.html`) and the ops-only
+  profiling panel (`admin.html`, `src/admin/`). All UI lives in `apps/client`; `apps/server/src/admin.ts`
+  owns that panel's API and basic auth, and serves the built page. In dev the panel runs on the Vite
+  server at `/admin.html` and proxies `/admin/` to the game server.
 - New maps are `MapSource` modules in `packages/shared/src/maps/data/` with the generated
   `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Vite dev
   server only — commit the generated files.

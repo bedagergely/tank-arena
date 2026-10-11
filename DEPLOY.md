@@ -134,11 +134,16 @@ not mounted at all, so a production deploy can never expose it unprotected.
 ## Profiling panel
 
 `/admin` is a small page that records CPU profiles, heap snapshots and sampling heap
-profiles with Node's built-in inspector, then lists them for download. It is always
-available in development at `/admin` with no auth.
+profiles with Node's built-in inspector, then lists them for download. The page is a
+second client build (`apps/client/admin.html`, alongside the game), so `pnpm build`
+produces it and the server serves it from `apps/client/dist`; the server itself only
+owns the API behind it.
 
-Like the monitor, in production it is only mounted when `ADMIN_PASSWORD` is set, and is
-then gated behind HTTP basic auth:
+In development the client is not built, so open the page on the Vite dev server at
+`http://localhost:3000/admin.html` — it proxies the API to the game server.
+
+In production the panel is only mounted when `ADMIN_PASSWORD` is set, and is then
+gated behind HTTP basic auth:
 
 ```dotenv
 ADMIN_USER=admin            # optional, defaults to admin
