@@ -1,4 +1,4 @@
-import { formatBytes, formatMicros, shortenPath, truncate } from "./format.ts";
+import { formatBytes, formatMicros, formatMicrosFine, shortenPath, truncate } from "./format.ts";
 
 export interface SummaryStat {
   label: string;
@@ -10,10 +10,16 @@ export interface SummaryRow {
   detail: string;
   value: string;
   share: number;
+  /** Optional extra figure per row, e.g. average time per call. */
+  extra?: string;
 }
 
 export interface SummarySection {
   title: string;
+  /** Header for `value` — what the main figure measures. */
+  valueLabel: string;
+  /** Header for `extra`, set only when the section actually has one. */
+  extraLabel?: string;
   rows: SummaryRow[];
 }
 
@@ -43,6 +49,7 @@ interface CallFrame {
   functionName?: unknown;
   url?: unknown;
   lineNumber?: unknown;
+  scriptId?: unknown;
 }
 
 interface Tally {
@@ -102,6 +109,28 @@ function frameKey(frame: CallFrame): string {
 }
 
 /**
+ * Coverage reports a raw `functionName` (empty for anonymous functions), so it
+ * is matched against the frame's raw name rather than the display one.
+ */
+function callCountKey(frame: CallFrame): string {
+  const scriptId = typeof frame.scriptId === "string" ? frame.scriptId : "";
+  const name = typeof frame.functionName === "string" ? frame.functionName : "";
+  return `${scriptId}\u0000${name}`;
+}
+
+/** Call counts the server embedded in the profile, keyed by script and name. */
+function callCountIndex(profile: Record<string, unknown> | null): Map<string, number> {
+  const index = new Map<string, number>();
+  if (!Array.isArray(profile?.callCounts)) return index;
+  for (const entry of profile.callCounts as Array<Record<string, unknown>>) {
+    const count = entry?.count;
+    if (typeof count !== "number") continue;
+    index.set(`${String(entry.scriptId)}\u0000${String(entry.functionName)}`, count);
+  }
+  return index;
+}
+
+/**
  * CPU profile: self time per function. V8 reports timestamps in microseconds
  * and tags each sample with the node it landed on, so summing the time deltas
  * of the samples per node gives exact self time.
@@ -158,18 +187,28 @@ export function summarizeCpuProfile(input: unknown): ProfileSummary {
     return micros > 0 && profiled > 0 ? [{ label, value: `${((micros / profiled) * 100).toFixed(1)}%` }] : [];
   };
 
+  const counts = callCountIndex(profile);
   const rows = [...byFunction.entries()]
     .sort((a, b) => b[1].size - a[1].size)
     .slice(0, TOP_ROWS)
     .map(([key, tally]) => {
       const frame = frames.get(key) ?? {};
+      const calls = counts.get(callCountKey(frame)) ?? 0;
       return {
         name: truncate(frameName(frame), 48),
         detail: frameLocation(frame),
         value: formatMicros(tally.size),
         share: profiled > 0 ? tally.size / profiled : 0,
+        ...(calls > 0 ? { extra: formatMicrosFine(tally.size / calls) } : {}),
       };
     });
+
+  const section: SummarySection = { title: "Hottest functions", valueLabel: "Self time", rows };
+  if (rows.some((row) => row.extra !== undefined)) {
+    section.extraLabel = "Avg / call";
+    // Keep the column readable when only some functions were counted.
+    for (const row of rows) row.extra ??= "—";
+  }
 
   return {
     stats: [
@@ -180,8 +219,8 @@ export function summarizeCpuProfile(input: unknown): ProfileSummary {
       ...metaStat("(garbage collector)", "GC"),
       ...metaStat("(program)", "VM"),
     ],
-    sections: [{ title: "Hottest functions", rows }],
-    note: "Time is self time — a function's own work, excluding everything it called. Idle, GC and VM are V8's own categories, not functions, so they are reported as percentages.",
+    sections: [section],
+    note: "Time is self time — a function's own work, excluding everything it called. Idle, GC and VM are V8's own categories, not functions. Per-call averages need V8 call counts, so profiles captured before they were recorded show —.",
   };
 }
 
@@ -233,6 +272,7 @@ export function summarizeHeapSnapshot(input: unknown): ProfileSummary {
   const sections: SummarySection[] = [
     {
       title: "Largest by self size",
+      valueLabel: "Self size",
       rows: toRows(byName, total, (key, tally) => {
         const { name, type } = labels.get(key) ?? { name: "", type: "" };
         return {
@@ -246,6 +286,7 @@ export function summarizeHeapSnapshot(input: unknown): ProfileSummary {
   if (byType.size > 0) {
     sections.push({
       title: "By node type",
+      valueLabel: "Self size",
       rows: toRows(
         byType,
         total,
@@ -316,7 +357,7 @@ export function summarizeHeapProfile(input: unknown): ProfileSummary {
       { label: "Sampled", value: formatBytes(total) },
       { label: "Functions", value: byFunction.size.toLocaleString() },
     ],
-    sections: [{ title: "Top allocating functions", rows }],
+    sections: [{ title: "Top allocating functions", valueLabel: "Allocated", rows }],
     note: "Bytes allocated in each function, sampled while the profile ran.",
   };
 }

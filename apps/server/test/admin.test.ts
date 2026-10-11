@@ -337,21 +337,32 @@ describe("inspector profiler", () => {
     return { dir, panel: createInspectorProfiler(dir) };
   }
 
-  it("records a CPU profile", async () => {
+  it("records a CPU profile with per-function call counts", async () => {
     const { dir, panel } = await profiler();
     expect(panel.cpuRunning).toBe(false);
     await panel.startCpuProfile();
     expect(panel.cpuRunning).toBe(true);
+
     let sink = 0;
-    for (let i = 0; i < 1_000_000; i++) sink += i;
+    const burn = (rounds: number) => {
+      for (let i = 0; i < rounds; i++) sink += i;
+    };
+    for (let i = 0; i < 25; i++) burn(40_000);
     expect(sink).toBeGreaterThan(0);
+
     const info = await panel.stopCpuProfile();
     expect(panel.cpuRunning).toBe(false);
 
     expect(info.kind).toBe("cpu");
     expect(info.name).toMatch(/^cpu-.*\.cpuprofile$/);
     expect(info.size).toBeGreaterThan(0);
-    expect(JSON.parse(await readFile(join(dir, info.name), "utf8"))).toHaveProperty("nodes");
+
+    const profile = JSON.parse(await readFile(join(dir, info.name), "utf8"));
+    expect(profile).toHaveProperty("nodes");
+    // A .cpuprofile carries no call counts, so the coverage pass has to add them.
+    const counts = profile.callCounts as Array<{ functionName: string; count: number }>;
+    expect(Array.isArray(counts)).toBe(true);
+    expect(counts.find((entry) => entry.functionName === "burn")?.count).toBe(25);
   });
 
   it("records a heap snapshot", async () => {

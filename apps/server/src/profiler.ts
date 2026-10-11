@@ -13,6 +13,27 @@ export interface SnapshotInfo {
   createdAt: number;
 }
 
+/**
+ * How many times a function was entered, from V8's precise coverage. A
+ * `.cpuprofile` only records time, so without this there is no way to average
+ * it per call. Stored inside the profile under `callCounts`.
+ */
+export interface CallCount {
+  scriptId: string;
+  functionName: string;
+  count: number;
+}
+
+interface CoverageFunction {
+  functionName: string;
+  ranges: Array<{ count: number }>;
+}
+
+interface CoverageScript {
+  scriptId: string;
+  functions: CoverageFunction[];
+}
+
 /** Thrown when a start/stop call does not match the profiler's current state. */
 export class ProfilerStateError extends Error {}
 
@@ -45,6 +66,35 @@ function post<T>(session: Session, method: string, params?: object): Promise<T> 
       else resolve(result as T);
     });
   });
+}
+
+/** Best-effort: profiling still works if coverage is unavailable. */
+async function startCallCounts(session: Session): Promise<void> {
+  try {
+    await post(session, "Profiler.startPreciseCoverage", { callCount: true, detailed: false });
+  } catch {
+    // Not every inspector build exposes coverage; the profile is still useful.
+  }
+}
+
+async function takeCallCounts(session: Session): Promise<CallCount[]> {
+  try {
+    const { result } = await post<{ result: CoverageScript[] }>(session, "Profiler.takePreciseCoverage");
+    await post(session, "Profiler.stopPreciseCoverage");
+    return result.flatMap((script) =>
+      script.functions.map((fn) => ({
+        scriptId: script.scriptId,
+        functionName: fn.functionName,
+        count: fn.ranges[0]?.count ?? 0,
+      })),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function withCallCounts(profile: CpuProfile, callCounts: CallCount[]): CpuProfile {
+  return callCounts.length > 0 ? { ...profile, callCounts } : profile;
 }
 
 function kindFromName(name: string): SnapshotKind | null {
@@ -104,6 +154,7 @@ export function createInspectorProfiler(dir: string): Profiler {
       cpuSession = session;
       try {
         await post(session, "Profiler.enable");
+        await startCallCounts(session);
         await post(session, "Profiler.start");
       } catch (err) {
         cpuSession = null;
@@ -116,10 +167,14 @@ export function createInspectorProfiler(dir: string): Profiler {
       const session = cpuSession;
       if (!session) throw new ProfilerStateError("CPU profiling is not running");
       cpuSession = null;
-      const { profile } = await post<{ profile: CpuProfile }>(session, "Profiler.stop").finally(() =>
-        session.disconnect(),
-      );
-      return await record("cpu", JSON.stringify(await remapProfile(profile)));
+      try {
+        const { profile } = await post<{ profile: CpuProfile }>(session, "Profiler.stop");
+        // Coverage counts survive the source-map remap, which only rewrites urls.
+        const callCounts = await takeCallCounts(session);
+        return await record("cpu", JSON.stringify(withCallCounts(await remapProfile(profile), callCounts)));
+      } finally {
+        session.disconnect();
+      }
     },
 
     async takeHeapSnapshot() {

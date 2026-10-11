@@ -177,13 +177,18 @@ page happens to poll; stopping the card stops the timer.
 - **Take heap snapshot** writes a `.heapsnapshot` (DevTools Memory tab).
 
 Every row also has an **Inspect** button that reads the profile in the page and shows its
-headline numbers plus the biggest consumers — self time per function for a CPU profile,
-shallow size per node name and per node type for a heap snapshot, and bytes allocated per
-function for a sampling profile. V8's `(idle)`, `(program)` and `(garbage collector)`
-frames are not functions, so a CPU profile reports them as Idle/VM/GC percentages instead
-of burying the real functions underneath them. Parsing happens in your browser, so the
-game process is never blocked; anything over 100 MB is refused with a pointer to DevTools
-instead, which streams them.
+headline numbers plus the biggest consumers — self time per function (with the average per
+call) for a CPU profile, shallow size per node name and per node type for a heap snapshot,
+and bytes allocated per function for a sampling profile. V8's `(idle)`, `(program)` and
+`(garbage collector)` frames are not functions, so a CPU profile reports them as Idle/VM/GC
+percentages instead of burying the real functions underneath them. Parsing happens in your
+browser, so the game process is never blocked; anything over 100 MB is refused with a
+pointer to DevTools instead, which streams them.
+
+A `.cpuprofile` records time but never how often a function ran, so CPU captures also run
+V8's precise coverage and store the counts inside the profile under `callCounts`. Per-call
+averages therefore only appear on profiles recorded since that was added; older ones show a
+dash.
 
 Snapshots land in `ADMIN_SNAPSHOT_DIR` and stay until you delete them; the page only
 serves names it recorded. Without `ADMIN_PASSWORD` the panel is not mounted at all.

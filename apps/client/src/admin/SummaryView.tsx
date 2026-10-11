@@ -30,6 +30,17 @@ export function SummaryView({ state }: { state: InspectState }) {
         <div key={section.title}>
           <h3 className="m-0 mb-1 text-sm font-semibold text-base-content/80">{section.title}</h3>
           <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-base-content/40">
+                <th className="w-6 font-normal" />
+                <th className="font-normal" />
+                <th className="w-24 py-1 pr-2 text-right font-normal">{section.valueLabel}</th>
+                {section.extraLabel !== undefined && (
+                  <th className="w-20 py-1 pr-2 text-right font-normal">{section.extraLabel}</th>
+                )}
+                <th className="w-14 py-1 text-right font-normal">%</th>
+              </tr>
+            </thead>
             <tbody>
               {section.rows.map((row, index) => (
                 <tr key={`${row.name}|${row.detail}`} className="border-b border-base-300/40 last:border-0">
@@ -39,6 +50,9 @@ export function SummaryView({ state }: { state: InspectState }) {
                     <span className="ml-2 text-base-content/50">{row.detail}</span>
                   </td>
                   <td className="w-24 py-1 pr-2 text-right tabular-nums">{row.value}</td>
+                  {section.extraLabel !== undefined && (
+                    <td className="w-20 py-1 pr-2 text-right tabular-nums">{row.extra ?? "—"}</td>
+                  )}
                   <td className="w-14 py-1 text-right text-base-content/60 tabular-nums">
                     {(row.share * 100).toFixed(1)}%
                   </td>
@@ -46,7 +60,7 @@ export function SummaryView({ state }: { state: InspectState }) {
               ))}
               {section.rows.length === 0 && (
                 <tr>
-                  <td className="py-1 text-base-content/50" colSpan={4}>
+                  <td className="py-1 text-base-content/50" colSpan={section.extraLabel !== undefined ? 5 : 4}>
                     Nothing recorded.
                   </td>
                 </tr>
