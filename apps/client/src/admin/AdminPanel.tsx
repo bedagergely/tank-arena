@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
+import type { MetricsSnapshot } from "@tank-arena/server/metrics";
 import type { SnapshotInfo } from "@tank-arena/server/profiler";
-import { BTN, BTN_DEFAULT, BTN_PRIMARY, CARD, CARD_BODY } from "../ui/controls.ts";
+import { BTN, BTN_DEFAULT, BTN_PRIMARY, BTN_SM, CARD, CARD_BODY } from "../ui/controls.ts";
+import { CpuGauge, MemoryGauge } from "./Gauges.tsx";
+import { formatBytes } from "./format.ts";
 import {
+  getMetrics,
   getStatus,
   listSnapshots,
   snapshotUrl,
   startCpuProfile,
+  startCpuRecording,
   startHeapSampling,
+  startMemoryRecording,
   stopCpuProfile,
+  stopCpuRecording,
   stopHeapSampling,
+  stopMemoryRecording,
   takeHeapSnapshot,
   type AdminStatus,
 } from "./api.ts";
@@ -20,12 +28,7 @@ const KIND_LABELS: Record<SnapshotInfo["kind"], string> = {
 };
 
 const IDLE: AdminStatus = { cpuRunning: false, heapSamplingRunning: false };
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+const POLL_MS = 1000;
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -42,17 +45,22 @@ const load = (): Promise<Loaded> =>
 export function AdminPanel() {
   const [status, setStatus] = useState<AdminStatus>(IDLE);
   const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([]);
+  const [metrics, setMetrics] = useState<MetricsSnapshot | null>(null);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const cpuRecording = metrics?.cpu.recording === true;
+  const memoryRecording = metrics?.memory.recording === true;
+
   useEffect(() => {
     let cancelled = false;
-    void load().then(
-      (next) => {
+    void Promise.all([load(), getMetrics()]).then(
+      ([next, samples]) => {
         if (cancelled) return;
         setStatus(next.status);
         setSnapshots(next.snapshots);
+        setMetrics(samples);
       },
       (err: unknown) => {
         if (cancelled) return;
@@ -65,15 +73,26 @@ export function AdminPanel() {
     };
   }, []);
 
+  // Only poll while something is being recorded; the server samples on its own
+  // clock, so this just picks up the latest reading.
+  useEffect(() => {
+    if (!cpuRecording && !memoryRecording) return;
+    const id = setInterval(() => {
+      void getMetrics().then(setMetrics, () => {});
+    }, POLL_MS);
+    return () => clearInterval(id);
+  }, [cpuRecording, memoryRecording]);
+
   async function run(label: string, action: () => Promise<unknown>) {
     setBusy(label);
     setFailed(false);
     setMessage(`${label}…`);
     try {
       await action();
-      const next = await load();
+      const [next, samples] = await Promise.all([load(), getMetrics()]);
       setStatus(next.status);
       setSnapshots(next.snapshots);
+      setMetrics(samples);
       setMessage("");
     } catch (err) {
       setFailed(true);
@@ -83,14 +102,59 @@ export function AdminPanel() {
     }
   }
 
+  const record = (what: "CPU" | "memory", running: boolean) =>
+    run(`${running ? "Stopping" : "Starting"} ${what} recording`, () => {
+      if (what === "CPU") return running ? stopCpuRecording() : startCpuRecording();
+      return running ? stopMemoryRecording() : startMemoryRecording();
+    });
+
   const toggle = (running: boolean, start: () => Promise<unknown>, stop: () => Promise<unknown>, what: string) =>
     run(`${running ? "Stopping" : "Starting"} ${what}`, running ? stop : start);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
       <h1 className="m-0 text-2xl text-primary">Profiling</h1>
+      <p className={`m-0 min-h-[1.5em] text-sm ${failed ? "text-error" : "text-base-content/60"}`}>{message}</p>
+
+      <section className={`${CARD} gap-4 p-4`}>
+        <h2 className="m-0 text-lg text-primary">Live metrics</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-3 rounded-lg border border-base-300 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">CPU</span>
+              <button
+                className={`${BTN} ${BTN_SM} ${cpuRecording ? BTN_PRIMARY : BTN_DEFAULT}`}
+                disabled={busy !== null}
+                onClick={() => record("CPU", cpuRecording)}
+              >
+                {cpuRecording ? "Stop recording" : "Start recording"}
+              </button>
+            </div>
+            <CpuGauge
+              sample={metrics?.cpu.latest ?? null}
+              history={metrics?.cpu.history ?? []}
+              cores={metrics?.cores ?? 0}
+            />
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border border-base-300 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">Memory</span>
+              <button
+                className={`${BTN} ${BTN_SM} ${memoryRecording ? BTN_PRIMARY : BTN_DEFAULT}`}
+                disabled={busy !== null}
+                onClick={() => record("memory", memoryRecording)}
+              >
+                {memoryRecording ? "Stop recording" : "Start recording"}
+              </button>
+            </div>
+            <MemoryGauge sample={metrics?.memory.latest ?? null} history={metrics?.memory.history ?? []} />
+          </div>
+        </div>
+      </section>
 
       <section className={`${CARD} gap-3 p-4`}>
+        <h2 className="m-0 text-lg text-primary">Snapshots</h2>
         <div className="flex flex-wrap gap-2">
           <button
             className={`${BTN} ${status.cpuRunning ? BTN_PRIMARY : BTN_DEFAULT}`}
@@ -114,43 +178,42 @@ export function AdminPanel() {
             Take heap snapshot
           </button>
         </div>
-        <p className={`m-0 min-h-[1.5em] text-sm ${failed ? "text-error" : "text-base-content/60"}`}>{message}</p>
-      </section>
 
-      <section className={`${CARD} ${CARD_BODY}`}>
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="text-left text-base-content/60">
-              <th className="border-b border-base-300 p-2 font-semibold">Snapshot</th>
-              <th className="border-b border-base-300 p-2 font-semibold">Type</th>
-              <th className="border-b border-base-300 p-2 text-right font-semibold">Size</th>
-              <th className="border-b border-base-300 p-2 font-semibold">Created</th>
-              <th className="border-b border-base-300 p-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {snapshots.map((snapshot) => (
-              <tr key={snapshot.name} className="border-b border-base-300/50 last:border-0">
-                <td className="break-all p-2">{snapshot.name}</td>
-                <td className="p-2 whitespace-nowrap">{KIND_LABELS[snapshot.kind]}</td>
-                <td className="p-2 text-right tabular-nums">{formatBytes(snapshot.size)}</td>
-                <td className="p-2 whitespace-nowrap">{new Date(snapshot.createdAt).toLocaleString()}</td>
-                <td className="p-2">
-                  <a className="text-primary underline" href={snapshotUrl(snapshot.name)} download={snapshot.name}>
-                    Download
-                  </a>
-                </td>
+        <div className={CARD_BODY}>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="text-left text-base-content/60">
+                <th className="border-b border-base-300 p-2 font-semibold">Snapshot</th>
+                <th className="border-b border-base-300 p-2 font-semibold">Type</th>
+                <th className="border-b border-base-300 p-2 text-right font-semibold">Size</th>
+                <th className="border-b border-base-300 p-2 font-semibold">Created</th>
+                <th className="border-b border-base-300 p-2" />
               </tr>
-            ))}
-            {snapshots.length === 0 && (
-              <tr>
-                <td className="p-2 text-base-content/50" colSpan={5}>
-                  No snapshots yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {snapshots.map((entry) => (
+                <tr key={entry.name} className="border-b border-base-300/50 last:border-0">
+                  <td className="break-all p-2">{entry.name}</td>
+                  <td className="p-2 whitespace-nowrap">{KIND_LABELS[entry.kind]}</td>
+                  <td className="p-2 text-right tabular-nums">{formatBytes(entry.size)}</td>
+                  <td className="p-2 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
+                  <td className="p-2">
+                    <a className="text-primary underline" href={snapshotUrl(entry.name)} download={entry.name}>
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+              {snapshots.length === 0 && (
+                <tr>
+                  <td className="p-2 text-base-content/50" colSpan={5}>
+                    No snapshots yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <p className="m-0 text-xs text-base-content/50">

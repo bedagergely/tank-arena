@@ -6,6 +6,7 @@ import express from "express";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { adminMiddleware, resolveAdminConfig, type AdminOptions } from "../src/admin.ts";
+import type { CpuSample, MemorySample, Metrics } from "../src/metrics.ts";
 import { createInspectorProfiler, type Profiler, type SnapshotInfo } from "../src/profiler.ts";
 
 const basic = (credentials: string) => `Basic ${Buffer.from(credentials).toString("base64")}`;
@@ -53,6 +54,55 @@ function fakeProfiler(): Profiler {
     resolveSnapshot(name) {
       return name === sample.name ? join(tmpdir(), name) : null;
     },
+  };
+}
+
+function fakeMetrics(): Metrics {
+  let cpu = false;
+  let memory = false;
+  const cpuSample: CpuSample = { at: 1, usage: 42 };
+  const memorySample: MemorySample = { at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 };
+
+  return {
+    cpu: {
+      get recording() {
+        return cpu;
+      },
+      get latest() {
+        return cpu ? cpuSample : null;
+      },
+      get history() {
+        return cpu ? [cpuSample] : [];
+      },
+      start() {
+        cpu = true;
+      },
+      stop() {
+        cpu = false;
+      },
+    },
+    memory: {
+      get recording() {
+        return memory;
+      },
+      get latest() {
+        return memory ? memorySample : null;
+      },
+      get history() {
+        return memory ? [memorySample] : [];
+      },
+      start() {
+        memory = true;
+      },
+      stop() {
+        memory = false;
+      },
+    },
+    snapshot: () => ({
+      cores: 4,
+      cpu: { recording: cpu, latest: cpu ? cpuSample : null, history: cpu ? [cpuSample] : [] },
+      memory: { recording: memory, latest: memory ? memorySample : null, history: memory ? [memorySample] : [] },
+    }),
   };
 }
 
@@ -194,6 +244,47 @@ describe("admin panel", () => {
     const base = await listen({ env: PROD, profiler: fakeProfiler() });
     const res = await fetch(`${base}/admin/snapshots/${encodeURIComponent("../etc/passwd")}`, { headers: auth });
     expect(res.status).toBe(404);
+  });
+
+  it("gates the live metrics behind the same auth", async () => {
+    const base = await listen({ env: PROD, profiler: fakeProfiler(), metrics: fakeMetrics() });
+    expect((await fetch(`${base}/admin/metrics`)).status).toBe(401);
+    expect((await fetch(`${base}/admin/metrics/cpu/start`, { method: "POST" })).status).toBe(401);
+  });
+
+  it("records CPU and memory usage on demand", async () => {
+    const base = await listen({ env: PROD, profiler: fakeProfiler(), metrics: fakeMetrics() });
+
+    const idle = await fetch(`${base}/admin/metrics`, { headers: auth });
+    expect(await idle.json()).toEqual({
+      cores: 4,
+      cpu: { recording: false, latest: null, history: [] },
+      memory: { recording: false, latest: null, history: [] },
+    });
+
+    const startCpu = await fetch(`${base}/admin/metrics/cpu/start`, { method: "POST", headers: auth });
+    expect(await startCpu.json()).toEqual({ recording: true });
+    const startMemory = await fetch(`${base}/admin/metrics/memory/start`, { method: "POST", headers: auth });
+    expect(await startMemory.json()).toEqual({ recording: true });
+
+    const running = await fetch(`${base}/admin/metrics`, { headers: auth });
+    expect(await running.json()).toEqual({
+      cores: 4,
+      cpu: { recording: true, latest: { at: 1, usage: 42 }, history: [{ at: 1, usage: 42 }] },
+      memory: {
+        recording: true,
+        latest: { at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 },
+        history: [{ at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 }],
+      },
+    });
+
+    const stopCpu = await fetch(`${base}/admin/metrics/cpu/stop`, { method: "POST", headers: auth });
+    expect(await stopCpu.json()).toEqual({ recording: false });
+    const stopMemory = await fetch(`${base}/admin/metrics/memory/stop`, { method: "POST", headers: auth });
+    expect(await stopMemory.json()).toEqual({ recording: false });
+
+    const stopped = await fetch(`${base}/admin/metrics`, { headers: auth });
+    expect(await stopped.json()).toMatchObject({ cpu: { recording: false }, memory: { recording: false } });
   });
 });
 

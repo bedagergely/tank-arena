@@ -155,7 +155,18 @@ ADMIN_SNAPSHOT_DIR=/tmp/tank-arena-snapshots   # optional
 docker compose up -d game   # picks up the new environment
 ```
 
-Then open `http://<host>/admin`, sign in, and use the buttons:
+Then open `http://<host>/admin`, sign in, and use the two halves of the page.
+
+**Live metrics** — the CPU card's **Start/Stop recording** samples the process CPU time
+(`process.cpuUsage()`, shown as a percentage of one core, so a multi-threaded burst can
+read above 100%), and the memory card does the same for `process.memoryUsage()`. The
+memory bar splits RSS the way Node accounts for it: the V8 heap (used and reserved),
+external C++ allocations (Buffers and friends) and everything else — code, stacks and
+native allocations. Both cards keep the last minute as a sparkline. The server samples
+once a second while a card is recording, so the reading does not depend on how often the
+page happens to poll; stopping the card stops the timer.
+
+**Snapshots** —
 
 - **Start/Stop CPU profiling** writes a `.cpuprofile` (open it in Chrome DevTools'
   Performance tab). Frames are mapped back to the original TypeScript through the

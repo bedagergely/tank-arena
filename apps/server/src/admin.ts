@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import express, { type Request, type RequestHandler, type Response, type Router } from "express";
+import { createMetrics, type Metrics } from "./metrics.ts";
 import { createInspectorProfiler, ProfilerStateError, type Profiler } from "./profiler.ts";
 
 export interface AdminConfig {
@@ -38,6 +39,8 @@ export interface AdminOptions {
   env?: NodeJS.ProcessEnv;
   /** Profiler to drive; injected by tests. */
   profiler?: Profiler;
+  /** Live CPU/memory recorders; injected by tests. */
+  metrics?: Metrics;
   /** Built client directory holding `admin.html`. The UI itself lives in apps/client. */
   clientDir?: string;
 }
@@ -76,7 +79,7 @@ function handle(
 
 /**
  * The profiling panel: start/stop the CPU and heap profilers, capture a heap
- * snapshot, and download anything recorded so far.
+ * snapshot, download anything recorded so far, and record live CPU/memory usage.
  *
  * The page itself is a second client build (apps/client/admin.html) served from
  * `clientDir`; this module only owns the API and its auth. Pass the result
@@ -88,6 +91,7 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
   if (!enabled) return null;
 
   const panel = options.profiler ?? createInspectorProfiler(snapshotDir);
+  const metrics = options.metrics ?? createMetrics();
   const router = express.Router();
 
   if (password) router.use(basicAuth(user, password));
@@ -107,6 +111,30 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
   router.get("/status", (_req, res) => {
     res.json({ cpuRunning: panel.cpuRunning, heapSamplingRunning: panel.heapSamplingRunning });
   });
+
+  // Live CPU/memory recording, sampled by the server so the reading does not
+  // depend on how often the page happens to poll.
+  router.get("/metrics", handle(async () => metrics.snapshot()));
+
+  router.post("/metrics/cpu/start", handle(async () => {
+    metrics.cpu.start();
+    return { recording: true };
+  }));
+
+  router.post("/metrics/cpu/stop", handle(async () => {
+    metrics.cpu.stop();
+    return { recording: false };
+  }));
+
+  router.post("/metrics/memory/start", handle(async () => {
+    metrics.memory.start();
+    return { recording: true };
+  }));
+
+  router.post("/metrics/memory/stop", handle(async () => {
+    metrics.memory.stop();
+    return { recording: false };
+  }));
 
   router.get("/snapshots", handle(async () => ({ snapshots: await panel.listSnapshots() })));
 

@@ -1,3 +1,4 @@
+import type { MetricsSnapshot } from "@tank-arena/server/metrics";
 import type { SnapshotInfo } from "@tank-arena/server/profiler";
 
 export interface AdminStatus {
@@ -31,3 +32,11 @@ export const startHeapSampling = () => request("/heap/start", "POST");
 export const stopHeapSampling = () => request<{ snapshot: SnapshotInfo }>("/heap/stop", "POST");
 
 export const snapshotUrl = (name: string) => `${BASE}/snapshots/${encodeURIComponent(name)}`;
+
+export const getMetrics = () => request<MetricsSnapshot>("/metrics");
+
+export const startCpuRecording = () => request("/metrics/cpu/start", "POST");
+export const stopCpuRecording = () => request("/metrics/cpu/stop", "POST");
+
+export const startMemoryRecording = () => request("/metrics/memory/start", "POST");
+export const stopMemoryRecording = () => request("/metrics/memory/stop", "POST");
