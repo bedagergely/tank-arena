@@ -185,10 +185,12 @@ percentages instead of burying the real functions underneath them. Parsing happe
 browser, so the game process is never blocked; anything over 100 MB is refused with a
 pointer to DevTools instead, which streams them.
 
-A `.cpuprofile` records time but never how often a function ran, so CPU captures also run
-V8's precise coverage and store the counts inside the profile under `callCounts`. Per-call
-averages therefore only appear on profiles recorded since that was added; older ones show a
-dash.
+A `.cpuprofile` records time but never how often a function ran, so per-call averages need
+V8's precise coverage, which the server enables only when you tick **Count calls**. That
+instrumentation is expensive — measured on this codebase it costs roughly 5x the CPU on
+call-heavy work (the plain sampling profiler is close to free) — so it is off by default and
+the panel warns while it is on. Counts are stored inside the profile under `callCounts`, so
+profiles recorded without it show a dash in the Avg / call column.
 
 Snapshots land in `ADMIN_SNAPSHOT_DIR` and stay until you delete them; the page only
 serves names it recorded. Without `ADMIN_PASSWORD` the panel is not mounted at all.

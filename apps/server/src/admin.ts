@@ -150,9 +150,13 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
     });
   });
 
-  router.post("/cpu/start", handle(async () => {
-    await panel.startCpuProfile();
-    return { cpuRunning: true };
+  // `countCalls` is opt-in: it needs V8's precise coverage, which is far too
+  // expensive to leave on while the simulation is running.
+  router.post("/cpu/start", express.json(), handle(async (req) => {
+    const body = (req.body ?? {}) as { countCalls?: unknown };
+    const countCalls = body.countCalls === true;
+    await panel.startCpuProfile(countCalls);
+    return { cpuRunning: true, countingCalls: countCalls };
   }));
 
   router.post("/cpu/stop", handle(async () => ({ snapshot: await panel.stopCpuProfile(), cpuRunning: false })));

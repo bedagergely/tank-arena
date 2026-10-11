@@ -63,6 +63,7 @@ export function AdminPanel() {
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
+  const [countCalls, setCountCalls] = useState(false);
 
   const cpuRecording = metrics?.cpu.recording === true;
   const memoryRecording = metrics?.memory.recording === true;
@@ -194,11 +195,26 @@ export function AdminPanel() {
 
       <section className={`${CARD} gap-3 p-4`}>
         <h2 className="m-0 text-lg text-primary">Snapshots</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            className={`inline-flex cursor-pointer items-center gap-1.5 text-sm ${countCalls ? "text-warning" : "text-base-content/70"}`}
+            title="Also record how often each function ran, which is what the Avg / call column needs. Uses V8 coverage, which costs roughly 5x the CPU on call-heavy code while it records, so leave it off unless you want per-call numbers."
+          >
+            <input
+              type="checkbox"
+              className="accent-primary"
+              checked={countCalls}
+              disabled={busy !== null || status.cpuRunning}
+              onChange={(e) => setCountCalls(e.target.checked)}
+            />
+            Count calls
+          </label>
           <button
             className={`${BTN} ${status.cpuRunning ? BTN_PRIMARY : BTN_DEFAULT}`}
             disabled={busy !== null}
-            onClick={() => toggle(status.cpuRunning, startCpuProfile, stopCpuProfile, "CPU profiling")}
+            onClick={() =>
+              toggle(status.cpuRunning, () => startCpuProfile(countCalls), stopCpuProfile, "CPU profiling")
+            }
           >
             {status.cpuRunning ? "Stop CPU profiling" : "Start CPU profiling"}
           </button>

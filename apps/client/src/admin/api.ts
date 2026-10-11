@@ -13,8 +13,13 @@ export interface AdminStatus {
  */
 const BASE = "/admin";
 
-async function request<T>(path: string, method: "GET" | "POST" = "GET"): Promise<T> {
-  const res = await fetch(BASE + path, { method });
+async function request<T>(path: string, method: "GET" | "POST" = "GET", payload?: unknown): Promise<T> {
+  const res = await fetch(BASE + path, {
+    method,
+    ...(payload === undefined
+      ? {}
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }),
+  });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(body.error ?? res.statusText);
   return body as T;
@@ -24,7 +29,7 @@ export const getStatus = () => request<AdminStatus>("/status");
 
 export const listSnapshots = () => request<{ snapshots: SnapshotInfo[] }>("/snapshots").then((r) => r.snapshots);
 
-export const startCpuProfile = () => request("/cpu/start", "POST");
+export const startCpuProfile = (countCalls: boolean) => request("/cpu/start", "POST", { countCalls });
 export const stopCpuProfile = () => request<{ snapshot: SnapshotInfo }>("/cpu/stop", "POST");
 
 export const takeHeapSnapshot = () => request<{ snapshot: SnapshotInfo }>("/heap/snapshot", "POST");
