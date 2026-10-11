@@ -5,7 +5,9 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default defineConfig(
-  { ignores: ["**/node_modules/", "**/dist/", "**/build/"] },
+  // `.agents/` holds per-machine agent skills (git-ignored, not committed); they
+  // are authored elsewhere and are not ours to lint.
+  { ignores: ["**/node_modules/", "**/dist/", "**/build/", "**/.agents/"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
