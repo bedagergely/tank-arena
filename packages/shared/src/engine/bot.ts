@@ -1,4 +1,4 @@
-import type { GameMap } from "../maps/types.ts";
+import type { GameMap, Rect } from "../maps/types.ts";
 import { PERK_BULLET_SPEED, PERK_TANK_SPEED, type GameRules } from "../rules.ts";
 import { circleHitsWall, circlesOverlap, moveCircle } from "./physics.ts";
 import { countBullets, maxBullets } from "./simulation.ts";
@@ -84,9 +84,12 @@ export interface BotState {
 
 const IDLE: PlayerInput = { throttle: 0, turn: 0, fire: false };
 const NAV_CELL = 10;
-const SHOT_DT = 1 / 60;
 const SHOT_MAX_SECONDS = 3;
 const SHOT_SAMPLES = 36;
+/** Contacts closer than this are treated as "at the current position" and ignored. */
+const SHOT_EPSILON = 1e-9;
+/** Seconds of travel used to step a bullet off a wall it just bounced on. */
+const SHOT_NUDGE = 1e-6;
 const AIM_TOLERANCE = 0.05;
 const STANDOFF = 110;
 const ARRIVE = 10;
@@ -209,10 +212,22 @@ function decide(bot: BotState, me: Tank, world: Readonly<World>, map: GameMap, r
 // ---------------------------------------------------------------------------
 // Shooting
 
+/** Where a bullet leg meets a surface, and which velocity components reflect off it. */
+interface ShotImpact {
+  time: number;
+  reflectX: boolean;
+  reflectY: boolean;
+}
+
 /**
  * Trace a bullet fired from `shooter` at `angle` through the walls, with the
  * real bounce rules. Returns the first tank it would hit (or undefined if it
  * expires, exceeds `maxBounces`, or runs out of time).
+ *
+ * Bullets travel in straight lines at constant speed and reflect off the
+ * axis-aligned wall rectangles, so the path is solved analytically instead of
+ * stepped frame by frame: each leg is a ray swept against the walls (a circle
+ * vs. AABB test) and the tanks, and the earliest impact wins.
  */
 export function simulateShot(
   world: Readonly<World>,
@@ -235,27 +250,198 @@ export function simulateShot(
   let vx = dirX * speed;
   let vy = dirY * speed;
   let bounces = 0;
-  const steps = Math.ceil(SHOT_MAX_SECONDS / SHOT_DT);
+  let time = 0;
 
-  for (let i = 1; i <= steps; i++) {
-    const moved = moveCircle(map, x, y, r, vx * SHOT_DT, vy * SHOT_DT);
-    x = moved.x;
-    y = moved.y;
-    if (moved.hitX) vx = -vx;
-    if (moved.hitY) vy = -vy;
-    if (moved.hitX || moved.hitY) {
-      bounces++;
-      if (bounces > maxBounces || bounces >= rules.bullet.maxBounces) return undefined;
-    }
-    for (const tank of world.tanks) {
-      if (!tank.alive) continue;
-      if (tank.slot === shooter.slot && (!canHitOwner || bounces === 0)) continue;
-      if (circlesOverlap(x, y, r, tank.x, tank.y, tankRadius)) {
-        return { slot: tank.slot, bounces, time: i * SHOT_DT };
-      }
-    }
+  // Firing point-blank into a wall starts the bullet inside it; the step
+  // simulator pins it there until it expires, so the shot reaches nothing.
+  if (circleHitsWall(map, x, y, r)) return undefined;
+
+  // The map border behaves like a wall for the bullet centre.
+  const borderMinX = r;
+  const borderMinY = r;
+  const borderMaxX = map.width - r;
+  const borderMaxY = map.height - r;
+
+  let remaining = SHOT_MAX_SECONDS;
+  while (remaining > 0) {
+    const wall = castShotRay(map.walls, r, x, y, vx, vy, remaining, borderMinX, borderMinY, borderMaxX, borderMaxY);
+    const legTime = wall ? wall.time : remaining;
+    const hit = firstShotHit(world.tanks, x, y, vx, vy, legTime, r, tankRadius, shooter.slot, canHitOwner, bounces);
+    if (hit) return { slot: hit.slot, bounces, time: time + hit.time };
+    if (!wall) return undefined;
+
+    x += vx * wall.time;
+    y += vy * wall.time;
+    time += wall.time;
+    remaining -= wall.time;
+    if (wall.reflectX) vx = -vx;
+    if (wall.reflectY) vy = -vy;
+    bounces++;
+    if (bounces > maxBounces || bounces >= rules.bullet.maxBounces) return undefined;
+
+    // Step a hair off the surface so the next leg cannot re-detect it.
+    x += vx * SHOT_NUDGE;
+    y += vy * SHOT_NUDGE;
+    time += SHOT_NUDGE;
+    remaining -= SHOT_NUDGE;
   }
   return undefined;
+}
+
+/**
+ * Earliest wall the leg from (x, y) along (vx, vy) meets within `limit` seconds,
+ * testing only the walls whose grown bounding box overlaps the leg's bounding
+ * box. Ties merge into a single impact that reflects every component involved.
+ */
+function castShotRay(
+  walls: readonly Rect[],
+  r: number,
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  limit: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): ShotImpact | undefined {
+  let best: ShotImpact | undefined;
+  const consider = (time: number, reflectX: boolean, reflectY: boolean): void => {
+    if (time <= SHOT_EPSILON || time > limit) return;
+    if (!best || time < best.time - SHOT_EPSILON) {
+      best = { time, reflectX, reflectY };
+    } else if (time <= best.time + SHOT_EPSILON) {
+      best.reflectX ||= reflectX;
+      best.reflectY ||= reflectY;
+    }
+  };
+
+  // The border planes, hit only while heading out of the map.
+  if (vx < 0) consider((minX - x) / vx, true, false);
+  else if (vx > 0) consider((maxX - x) / vx, true, false);
+  if (vy < 0) consider((minY - y) / vy, false, true);
+  else if (vy > 0) consider((maxY - y) / vy, false, true);
+
+  const legMinX = Math.min(x, x + vx * limit);
+  const legMaxX = Math.max(x, x + vx * limit);
+  const legMinY = Math.min(y, y + vy * limit);
+  const legMaxY = Math.max(y, y + vy * limit);
+  for (const w of walls) {
+    if (w.x + w.width + r < legMinX || w.x - r > legMaxX || w.y + w.height + r < legMinY || w.y - r > legMaxY) continue;
+    const hit = rayShotBox(w, r, x, y, vx, vy);
+    if (hit) consider(hit.time, hit.reflectX, hit.reflectY);
+  }
+  return best;
+}
+
+/**
+ * Entry point of a ray into the Minkowski sum of a wall and the bullet circle:
+ * the wall grown by `r` with rounded corners. A ray only grazes past a corner
+ * if it stays more than `r` from the rect, so a sharp grown box would wrongly
+ * block it; flat faces and quarter-circle corner arcs are tested separately.
+ */
+function rayShotBox(w: Rect, r: number, x: number, y: number, vx: number, vy: number): ShotImpact | undefined {
+  let best: ShotImpact | undefined;
+  const consider = (time: number, reflectX: boolean, reflectY: boolean): void => {
+    if (time <= SHOT_EPSILON) return;
+    if (!best || time < best.time - SHOT_EPSILON) best = { time, reflectX, reflectY };
+    else if (time <= best.time + SHOT_EPSILON) {
+      best.reflectX ||= reflectX;
+      best.reflectY ||= reflectY;
+    }
+  };
+
+  // Flat faces, over the wall's own extent (past that it is a rounded corner).
+  if (vx > 0) {
+    const t = (w.x - r - x) / vx;
+    const cy = y + vy * t;
+    if (cy >= w.y && cy <= w.y + w.height) consider(t, true, false);
+  } else if (vx < 0) {
+    const t = (w.x + w.width + r - x) / vx;
+    const cy = y + vy * t;
+    if (cy >= w.y && cy <= w.y + w.height) consider(t, true, false);
+  }
+  if (vy > 0) {
+    const t = (w.y - r - y) / vy;
+    const cx = x + vx * t;
+    if (cx >= w.x && cx <= w.x + w.width) consider(t, false, true);
+  } else if (vy < 0) {
+    const t = (w.y + w.height + r - y) / vy;
+    const cx = x + vx * t;
+    if (cx >= w.x && cx <= w.x + w.width) consider(t, false, true);
+  }
+
+  // Rounded corners: the centre sweeps a quarter arc of radius `r` around the
+  // rect corner. Reflect the axis the contact normal leans towards.
+  const speedSq = vx * vx + vy * vy;
+  const corner = (cx: number, cy: number): void => {
+    const px = x - cx;
+    const py = y - cy;
+    const c = px * px + py * py - r * r;
+    if (c < 0) return;
+    const b = px * vx + py * vy;
+    const disc = b * b - speedSq * c;
+    if (disc < 0) return;
+    const t = (-b - Math.sqrt(disc)) / speedSq;
+    if (t <= SHOT_EPSILON) return;
+    const hx = x + vx * t - cx;
+    const hy = y + vy * t - cy;
+    // Only the arc facing outward from this corner counts; elsewhere a face is nearer.
+    if ((cx === w.x ? hx <= 0 : hx >= 0) && (cy === w.y ? hy <= 0 : hy >= 0)) {
+      consider(t, Math.abs(hx) >= Math.abs(hy), Math.abs(hy) >= Math.abs(hx));
+    }
+  };
+  corner(w.x, w.y);
+  corner(w.x + w.width, w.y);
+  corner(w.x, w.y + w.height);
+  corner(w.x + w.width, w.y + w.height);
+  return best;
+}
+
+/**
+ * Earliest tank the leg from (x, y) along (vx, vy) overlaps within `limit`
+ * seconds. The bullet and tank are circles, so contact is the first root of a
+ * quadratic distance test.
+ */
+function firstShotHit(
+  tanks: readonly Tank[],
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  limit: number,
+  bulletRadius: number,
+  tankRadius: number,
+  shooterSlot: number,
+  canHitOwner: boolean,
+  bounces: number,
+): { slot: number; time: number } | undefined {
+  const reachSq = (bulletRadius + tankRadius) ** 2;
+  const speedSq = vx * vx + vy * vy;
+  let best: { slot: number; time: number } | undefined;
+
+  for (const tank of tanks) {
+    if (!tank.alive) continue;
+    if (tank.slot === shooterSlot && (!canHitOwner || bounces === 0)) continue;
+
+    const px = x - tank.x;
+    const py = y - tank.y;
+    const c = px * px + py * py - reachSq;
+    let hit: number;
+    if (c < 0) {
+      hit = 0;
+    } else {
+      const b = px * vx + py * vy;
+      if (b >= 0) continue;
+      const disc = b * b - speedSq * c;
+      if (disc < 0) continue;
+      hit = (-b - Math.sqrt(disc)) / speedSq;
+    }
+    if (hit > limit) continue;
+    if (!best || hit < best.time) best = { slot: tank.slot, time: hit };
+  }
+  return best;
 }
 
 /**

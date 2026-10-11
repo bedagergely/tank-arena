@@ -8,6 +8,7 @@ import {
   findThreat,
   resetBot,
   sanitizeInput,
+  simulateShot,
   thinkBot,
   type BotDifficulty,
   type GameMap,
@@ -177,5 +178,72 @@ describe("bot", () => {
     resetBot(bot);
     expect(bot.field).toBeUndefined();
     expect(bot.input).toEqual(IDLE);
+  });
+});
+
+describe("simulateShot", () => {
+  const noOwner = { ...rules, bullet: { ...rules.bullet, canHitOwner: false } };
+
+  function setup(map: GameMap) {
+    const engine = createJsEngine(map, rules);
+    engine.reset([0, 1], 1);
+    return engine;
+  }
+
+  it("hits a target on a clear line", () => {
+    const engine = setup(corridor);
+    const [me, target] = engine.world.tanks;
+    const angle = Math.atan2(target!.y - me!.y, target!.x - me!.x);
+    const hit = simulateShot(engine.world, corridor, rules, me!, angle, 0);
+    expect(hit).toMatchObject({ slot: target!.slot, bounces: 0 });
+    expect(hit!.time).toBeGreaterThan(0);
+  });
+
+  it("returns undefined when a wall blocks the line", () => {
+    const engine = setup(detour);
+    const [me, target] = engine.world.tanks;
+    const angle = Math.atan2(target!.y - me!.y, target!.x - me!.x);
+    expect(simulateShot(engine.world, detour, rules, me!, angle, 0)).toBeUndefined();
+  });
+
+  it("reaches a bank shot the direct line cannot, within its bounce budget", () => {
+    const engine = setup(detour);
+    const [me, target] = engine.world.tanks;
+    const bank = findShot(engine.world, detour, rules, me!, target!, 3);
+    expect(bank).toBeDefined();
+    const hit = simulateShot(engine.world, detour, rules, me!, bank!, 3);
+    expect(hit).toMatchObject({ slot: target!.slot });
+    expect(hit!.bounces).toBeGreaterThan(0);
+    // The same shot exceeds a zero-bounce budget.
+    expect(simulateShot(engine.world, detour, rules, me!, bank!, 0)).toBeUndefined();
+  });
+
+  it("reflects off walls and can hit the shooter once it has bounced", () => {
+    const engine = setup(corridor);
+    const me = engine.world.tanks[0]!;
+    const up = -Math.PI / 2;
+    expect(simulateShot(engine.world, corridor, rules, me, up, 2)).toMatchObject({ slot: me.slot, bounces: 1 });
+    // With owner hits disabled it bounces until the budget runs out instead.
+    expect(simulateShot(engine.world, corridor, noOwner, me, up, 5)).toBeUndefined();
+  });
+
+  it("stops at a wall when no bounces are allowed", () => {
+    const engine = setup(corridor);
+    const me = engine.world.tanks[0]!;
+    expect(simulateShot(engine.world, corridor, rules, me, -Math.PI / 2, 0)).toBeUndefined();
+  });
+
+  it("agrees with a bullet fired in the live simulation", () => {
+    const engine = setup(corridor);
+    const me = engine.world.tanks[0]!;
+    expect(simulateShot(engine.world, corridor, rules, me, me.angle, 0)).toMatchObject({ slot: 1, bounces: 0 });
+
+    engine.setInput(0, FIRE);
+    const dt = 1 / rules.tickRate;
+    let hit: TickEvent | undefined;
+    for (let i = 0; i < 120 && !hit; i++) {
+      hit = engine.step(dt).find((e) => e.type === "hit");
+    }
+    expect(hit).toMatchObject({ type: "hit", targetSlot: 1 });
   });
 });
