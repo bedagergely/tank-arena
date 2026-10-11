@@ -12,7 +12,6 @@ import {
 import { colorFor, GameRenderer, PERK_COLORS } from "../game/GameRenderer.ts";
 import { cssColor } from "./PlayerList.tsx";
 import { useKeyboardInput } from "../game/useKeyboardInput.ts";
-import { Latency } from "./Latency.tsx";
 import type { GameRoom, GameStateSnapshot } from "../net/client.ts";
 
 interface Props {
@@ -58,7 +57,6 @@ export function Arena({ room, state, map }: Props) {
     >
       <div ref={hostRef} />
       {state.phase !== "lobby" && <Scoreboard state={state} />}
-      {state.phase === "playing" && <Latency room={room} />}
       {myTank && <PerkBar tank={myTank} />}
       {overlay && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-center">

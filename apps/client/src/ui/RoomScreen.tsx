@@ -4,6 +4,7 @@ import { BOT_DIFFICULTIES, DEFAULT_BOT_DIFFICULTY, DEFAULT_RULES, getMap, winsNe
 import type { GameRoom } from "../net/client.ts";
 import { Arena } from "./Arena.tsx";
 import { Chat } from "./Chat.tsx";
+import { Latency } from "./Latency.tsx";
 import { PlayerList } from "./PlayerList.tsx";
 import { BTN, BTN_DEFAULT, BTN_GHOST, BTN_PRIMARY, BTN_SM, SELECT_SM } from "./controls.ts";
 
@@ -68,6 +69,7 @@ export function RoomScreen({ room, onLeave }: Props) {
           Room <span className="font-mono">{room.roomId}</span> · {map?.name ?? state.mapId} · {state.phase}
           {state.phase !== "lobby" && ` · round ${state.round}/${state.rounds}`}
         </span>
+        {state.phase === "playing" && <Latency room={room} />}
         <button className={`${BTN} ${BTN_GHOST} ${BTN_SM}`} onClick={onLeave}>
           Leave
         </button>

@@ -7,8 +7,9 @@ const PING_INTERVAL_MS = 2000;
 /**
  * Round-trip time to the server, measured with Colyseus' built-in ping (a
  * protocol-level PING the server answers with PONG, so nothing of ours is on
- * the wire). Mounted only while a round is being played, so it never polls
- * from the lobby or the results screens.
+ * the wire). Sits in the room header rather than over the map. Mounted only
+ * while a round is being played, so it never polls from the lobby or the
+ * results screens.
  */
 export function Latency({ room }: { room: GameRoom }) {
   const [ms, setMs] = useState<number | null>(null);
@@ -25,9 +26,12 @@ export function Latency({ room }: { room: GameRoom }) {
   }, [room]);
 
   return (
-    <span className="pointer-events-none absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs backdrop-blur">
-      <span className="text-base-content/60">ping</span>{" "}
-      <span className={`font-mono ${latencyTone(ms)}`}>{formatLatency(ms)}</span>
+    <span
+      className="inline-flex items-center gap-1.5 rounded-lg border border-base-300 bg-base-200/60 px-3 py-1.5 text-xs"
+      title="Round-trip time to the server"
+    >
+      <span className="text-base-content/60">ping</span>
+      <span className={`font-mono tabular-nums ${latencyTone(ms)}`}>{formatLatency(ms)}</span>
     </span>
   );
 }
