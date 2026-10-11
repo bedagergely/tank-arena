@@ -21,20 +21,17 @@ const sample: SnapshotInfo = {
   createdAt: 1767225600000,
 };
 
-function fakeProfiler(): Profiler & { startArgs: boolean[] } {
+function fakeProfiler(): Profiler {
   let cpu = false;
   let heap = false;
-  const startArgs: boolean[] = [];
   return {
-    startArgs,
     get cpuRunning() {
       return cpu;
     },
     get heapSamplingRunning() {
       return heap;
     },
-    async startCpuProfile(countCalls = false) {
-      startArgs.push(countCalls);
+    async startCpuProfile() {
       cpu = true;
     },
     async stopCpuProfile() {
@@ -210,14 +207,11 @@ describe("admin panel", () => {
   });
 
   it("drives the CPU profiler and reports status", async () => {
-    const panel = fakeProfiler();
-    const base = await listen({ env: PROD, profiler: panel });
+    const base = await listen({ env: PROD, profiler: fakeProfiler() });
 
-    // Call counting is opt-in, so a bare start must not ask for it.
     const start = await fetch(`${base}/admin/cpu/start`, { method: "POST", headers: auth });
     expect(start.status).toBe(200);
-    expect(await start.json()).toEqual({ cpuRunning: true, countingCalls: false });
-    expect(panel.startArgs).toEqual([false]);
+    expect(await start.json()).toEqual({ cpuRunning: true });
 
     const status = await fetch(`${base}/admin/status`, { headers: auth });
     expect(await status.json()).toEqual({ cpuRunning: true, heapSamplingRunning: false });
@@ -225,19 +219,6 @@ describe("admin panel", () => {
     const stop = await fetch(`${base}/admin/cpu/stop`, { method: "POST", headers: auth });
     expect(stop.status).toBe(200);
     expect(await stop.json()).toEqual({ snapshot: sample, cpuRunning: false });
-  });
-
-  it("passes a call-counting request through to the profiler", async () => {
-    const panel = fakeProfiler();
-    const base = await listen({ env: PROD, profiler: panel });
-
-    const res = await fetch(`${base}/admin/cpu/start`, {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ countCalls: true }),
-    });
-    expect(await res.json()).toEqual({ cpuRunning: true, countingCalls: true });
-    expect(panel.startArgs).toEqual([true]);
   });
 
   it("drives the heap profilers", async () => {
@@ -356,7 +337,7 @@ describe("inspector profiler", () => {
     return { dir, panel: createInspectorProfiler(dir) };
   }
 
-  it("records a CPU profile without call counts by default", async () => {
+  it("records a CPU profile", async () => {
     const { dir, panel } = await profiler();
     expect(panel.cpuRunning).toBe(false);
     await panel.startCpuProfile();
@@ -372,30 +353,7 @@ describe("inspector profiler", () => {
     expect(info.kind).toBe("cpu");
     expect(info.name).toMatch(/^cpu-.*\.cpuprofile$/);
     expect(info.size).toBeGreaterThan(0);
-
-    const profile = JSON.parse(await readFile(join(dir, info.name), "utf8"));
-    expect(profile).toHaveProperty("nodes");
-    // V8 coverage is far too expensive to run unless it was asked for.
-    expect(profile.callCounts).toBeUndefined();
-  });
-
-  it("records per-function call counts only when asked", async () => {
-    const { dir, panel } = await profiler();
-    await panel.startCpuProfile(true);
-
-    let sink = 0;
-    const burn = (rounds: number) => {
-      for (let i = 0; i < rounds; i++) sink += i;
-    };
-    for (let i = 0; i < 25; i++) burn(40_000);
-    expect(sink).toBeGreaterThan(0);
-
-    const info = await panel.stopCpuProfile();
-    // A .cpuprofile carries no call counts, so the coverage pass has to add them.
-    const profile = JSON.parse(await readFile(join(dir, info.name), "utf8"));
-    const counts = profile.callCounts as Array<{ functionName: string; count: number }>;
-    expect(Array.isArray(counts)).toBe(true);
-    expect(counts.find((entry) => entry.functionName === "burn")?.count).toBe(25);
+    expect(JSON.parse(await readFile(join(dir, info.name), "utf8"))).toHaveProperty("nodes");
   });
 
   it("records a heap snapshot", async () => {

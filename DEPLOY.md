@@ -177,20 +177,18 @@ page happens to poll; stopping the card stops the timer.
 - **Take heap snapshot** writes a `.heapsnapshot` (DevTools Memory tab).
 
 Every row also has an **Inspect** button that reads the profile in the page and shows its
-headline numbers plus the biggest consumers — self time per function (with the average per
-call) for a CPU profile, shallow size per node name and per node type for a heap snapshot,
-and bytes allocated per function for a sampling profile. V8's `(idle)`, `(program)` and
-`(garbage collector)` frames are not functions, so a CPU profile reports them as Idle/VM/GC
-percentages instead of burying the real functions underneath them. Parsing happens in your
-browser, so the game process is never blocked; anything over 100 MB is refused with a
-pointer to DevTools instead, which streams them.
+headline numbers plus the biggest consumers — self time per function for a CPU profile,
+shallow size per node name and per node type for a heap snapshot, and bytes allocated per
+function for a sampling profile. V8's `(idle)`, `(program)` and `(garbage collector)`
+frames are not functions, so a CPU profile reports them as Idle/VM/GC percentages instead
+of burying the real functions underneath them. Parsing happens in your browser, so the
+game process is never blocked; anything over 100 MB is refused with a pointer to DevTools
+instead, which streams them.
 
-A `.cpuprofile` records time but never how often a function ran, so per-call averages need
-V8's precise coverage, which the server enables only when you tick **Count calls**. That
-instrumentation is expensive — measured on this codebase it costs roughly 5x the CPU on
-call-heavy work (the plain sampling profiler is close to free) — so it is off by default and
-the panel warns while it is on. Counts are stored inside the profile under `callCounts`, so
-profiles recorded without it show a dash in the Avg / call column.
+A `.cpuprofile` records time but never how often a function ran, so there is no per-call
+average: V8 only exposes call counts through its precise coverage, which instruments every
+function and measured roughly 5x the CPU on call-heavy work here — far too expensive to run
+against a live game.
 
 Snapshots land in `ADMIN_SNAPSHOT_DIR` and stay until you delete them; the page only
 serves names it recorded. Without `ADMIN_PASSWORD` the panel is not mounted at all.

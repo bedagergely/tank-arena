@@ -4,9 +4,9 @@ import { summarize, summarizeCpuProfile, summarizeHeapProfile, summarizeHeapSnap
 const CPU_PROFILE = {
   nodes: [
     { id: 1, callFrame: { functionName: "(root)", url: "", lineNumber: -1 }, hitCount: 0 },
-    { id: 2, callFrame: { functionName: "tick", url: "file:///app/src/loop.ts", lineNumber: 9, scriptId: "7" }, hitCount: 3 },
-    { id: 3, callFrame: { functionName: "tick", url: "file:///app/src/loop.ts", lineNumber: 9, scriptId: "7" }, hitCount: 1 },
-    { id: 4, callFrame: { functionName: "gc", url: "node:internal/gc", lineNumber: 4, scriptId: "9" }, hitCount: 0 },
+    { id: 2, callFrame: { functionName: "tick", url: "file:///app/src/loop.ts", lineNumber: 9 }, hitCount: 3 },
+    { id: 3, callFrame: { functionName: "tick", url: "file:///app/src/loop.ts", lineNumber: 9 }, hitCount: 1 },
+    { id: 4, callFrame: { functionName: "gc", url: "node:internal/gc", lineNumber: 4 }, hitCount: 0 },
   ],
   samples: [2, 2, 2, 3, 4],
   timeDeltas: [1000, 2000, 3000, 4000, 5000],
@@ -111,41 +111,6 @@ describe("summarizeCpuProfile", () => {
 
   it("rejects something that is not a CPU profile", () => {
     expect(() => summarizeCpuProfile({ nope: true })).toThrow(/CPU profile/);
-  });
-
-  it("averages self time per call when the profile carries call counts", () => {
-    const summary = summarizeCpuProfile({
-      ...CPU_PROFILE,
-      callCounts: [
-        { scriptId: "7", functionName: "tick", count: 2 },
-        { scriptId: "9", functionName: "gc", count: 5 },
-      ],
-    });
-
-    const section = summary.sections[0]!;
-    expect(section.valueLabel).toBe("Self time");
-    expect(section.extraLabel).toBe("Avg / call");
-    // tick: 10000us over 2 calls; gc: 5000us over 5.
-    expect(section.rows.map((row) => [row.name, row.extra])).toEqual([
-      ["tick", "5.0 ms"],
-      ["gc", "1.0 ms"],
-    ]);
-  });
-
-  it("shows a dash for functions the coverage did not count", () => {
-    const section = summarizeCpuProfile({
-      ...CPU_PROFILE,
-      callCounts: [{ scriptId: "7", functionName: "tick", count: 2 }],
-    }).sections[0]!;
-
-    expect(section.rows.find((row) => row.name === "tick")!.extra).toBe("5.0 ms");
-    expect(section.rows.find((row) => row.name === "gc")!.extra).toBe("—");
-  });
-
-  it("omits the per-call column entirely without call counts", () => {
-    const section = summarizeCpuProfile(CPU_PROFILE).sections[0]!;
-    expect(section.extraLabel).toBeUndefined();
-    expect(section.rows.every((row) => row.extra === undefined)).toBe(true);
   });
 });
 

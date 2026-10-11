@@ -13,38 +13,13 @@ export interface SnapshotInfo {
   createdAt: number;
 }
 
-/**
- * How many times a function was entered, from V8's precise coverage. A
- * `.cpuprofile` only records time, so without this there is no way to average
- * it per call. Stored inside the profile under `callCounts`.
- */
-export interface CallCount {
-  scriptId: string;
-  functionName: string;
-  count: number;
-}
-
-interface CoverageFunction {
-  functionName: string;
-  ranges: Array<{ count: number }>;
-}
-
-interface CoverageScript {
-  scriptId: string;
-  functions: CoverageFunction[];
-}
-
 /** Thrown when a start/stop call does not match the profiler's current state. */
 export class ProfilerStateError extends Error {}
 
 export interface Profiler {
   readonly cpuRunning: boolean;
   readonly heapSamplingRunning: boolean;
-  /**
-   * `countCalls` also records how often each function ran, which is what makes
-   * the per-call average possible — at a real cost, so it defaults to off.
-   */
-  startCpuProfile(countCalls?: boolean): Promise<void>;
+  startCpuProfile(): Promise<void>;
   stopCpuProfile(): Promise<SnapshotInfo>;
   takeHeapSnapshot(): Promise<SnapshotInfo>;
   startHeapSampling(): Promise<void>;
@@ -72,44 +47,6 @@ function post<T>(session: Session, method: string, params?: object): Promise<T> 
   });
 }
 
-/**
- * Call counts come from V8's precise coverage, which instruments every function.
- * Measured on call-heavy code it costs roughly 8x the uninstrumented time (the
- * CPU sampler, by contrast, is ~free), and the simulation is exactly that shape.
- * So it is opt-in per capture and never switched on by default.
- *
- * Best-effort: profiling still works if coverage is unavailable.
- */
-async function startCallCounts(session: Session): Promise<boolean> {
-  try {
-    await post(session, "Profiler.startPreciseCoverage", { callCount: true, detailed: false });
-    return true;
-  } catch {
-    // Not every inspector build exposes coverage; the profile is still useful.
-    return false;
-  }
-}
-
-async function takeCallCounts(session: Session): Promise<CallCount[]> {
-  try {
-    const { result } = await post<{ result: CoverageScript[] }>(session, "Profiler.takePreciseCoverage");
-    await post(session, "Profiler.stopPreciseCoverage");
-    return result.flatMap((script) =>
-      script.functions.map((fn) => ({
-        scriptId: script.scriptId,
-        functionName: fn.functionName,
-        count: fn.ranges[0]?.count ?? 0,
-      })),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function withCallCounts(profile: CpuProfile, callCounts: CallCount[]): CpuProfile {
-  return callCounts.length > 0 ? { ...profile, callCounts } : profile;
-}
-
 function kindFromName(name: string): SnapshotKind | null {
   for (const [kind, extension] of Object.entries(EXTENSIONS) as [SnapshotKind, string][]) {
     if (name.endsWith(extension)) return kind;
@@ -128,7 +65,6 @@ function fileStamp(): string {
  */
 export function createInspectorProfiler(dir: string): Profiler {
   let cpuSession: Session | null = null;
-  let countingCalls = false;
   let samplingSession: Session | null = null;
 
   async function describe(name: string): Promise<SnapshotInfo | null> {
@@ -161,19 +97,16 @@ export function createInspectorProfiler(dir: string): Profiler {
       return samplingSession !== null;
     },
 
-    async startCpuProfile(countCalls = false) {
+    async startCpuProfile() {
       if (cpuSession) throw new ProfilerStateError("CPU profiling is already running");
       const session = new Session();
       session.connect();
       cpuSession = session;
-      countingCalls = false;
       try {
         await post(session, "Profiler.enable");
-        if (countCalls) countingCalls = await startCallCounts(session);
         await post(session, "Profiler.start");
       } catch (err) {
         cpuSession = null;
-        countingCalls = false;
         session.disconnect();
         throw err;
       }
@@ -182,14 +115,10 @@ export function createInspectorProfiler(dir: string): Profiler {
     async stopCpuProfile() {
       const session = cpuSession;
       if (!session) throw new ProfilerStateError("CPU profiling is not running");
-      const counting = countingCalls;
       cpuSession = null;
-      countingCalls = false;
       try {
         const { profile } = await post<{ profile: CpuProfile }>(session, "Profiler.stop");
-        // Coverage counts survive the source-map remap, which only rewrites urls.
-        const callCounts = counting ? await takeCallCounts(session) : [];
-        return await record("cpu", JSON.stringify(withCallCounts(await remapProfile(profile), callCounts)));
+        return await record("cpu", JSON.stringify(await remapProfile(profile)));
       } finally {
         session.disconnect();
       }

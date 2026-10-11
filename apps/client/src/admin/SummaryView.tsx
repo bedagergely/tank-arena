@@ -35,9 +35,6 @@ export function SummaryView({ state }: { state: InspectState }) {
                 <th className="w-6 font-normal" />
                 <th className="font-normal" />
                 <th className="w-24 py-1 pr-2 text-right font-normal">{section.valueLabel}</th>
-                {section.extraLabel !== undefined && (
-                  <th className="w-20 py-1 pr-2 text-right font-normal">{section.extraLabel}</th>
-                )}
                 <th className="w-14 py-1 text-right font-normal">%</th>
               </tr>
             </thead>
@@ -50,9 +47,6 @@ export function SummaryView({ state }: { state: InspectState }) {
                     <span className="ml-2 text-base-content/50">{row.detail}</span>
                   </td>
                   <td className="w-24 py-1 pr-2 text-right tabular-nums">{row.value}</td>
-                  {section.extraLabel !== undefined && (
-                    <td className="w-20 py-1 pr-2 text-right tabular-nums">{row.extra ?? "—"}</td>
-                  )}
                   <td className="w-14 py-1 text-right text-base-content/60 tabular-nums">
                     {(row.share * 100).toFixed(1)}%
                   </td>
@@ -60,7 +54,7 @@ export function SummaryView({ state }: { state: InspectState }) {
               ))}
               {section.rows.length === 0 && (
                 <tr>
-                  <td className="py-1 text-base-content/50" colSpan={section.extraLabel !== undefined ? 5 : 4}>
+                  <td className="py-1 text-base-content/50" colSpan={4}>
                     Nothing recorded.
                   </td>
                 </tr>
