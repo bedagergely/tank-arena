@@ -236,6 +236,9 @@ importers:
       vite:
         specifier: ^7.1.0
         version: 7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)
+      vitest:
+        specifier: ^4.0.0
+        version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0))
 
   apps/server:
     dependencies:
@@ -245,6 +248,9 @@ importers:
       '@colyseus/tools':
         specifier: ^0.18.2
         version: 0.18.3(@colyseus/core@0.18.12)(@colyseus/ws-transport@0.18.2)(supports-color@7.2.0)
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
       '@tank-arena/shared':
         specifier: workspace:*
         version: link:../../packages/shared

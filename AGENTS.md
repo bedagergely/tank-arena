@@ -33,7 +33,7 @@ these supply-chain guards; if a dependency fails to install, escalate instead of
 
 | Command          | What it does                                                        |
 | ---------------- | ------------------------------------------------------------------- |
-| `pnpm test`      | Vitest for `packages/shared` + `apps/server`                        |
+| `pnpm test`      | Vitest for `packages/shared`, `apps/server` and `apps/client`        |
 | `pnpm typecheck` | `tsc --noEmit` across all workspaces                                |
 | `pnpm lint`      | ESLint over the whole repo                                          |
 | `pnpm build`     | `apps/server/build/index.js` and `apps/client/dist/`                |
@@ -44,6 +44,8 @@ runs exactly these plus `pnpm build`, so a change that fails them will not merge
 
 Server test files boot a Colyseus server on `@colyseus/testing`'s fixed port, so they run
 sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep it that way.
+The client's `vitest.config.ts` deliberately skips the React/Tailwind plugins — it is for
+pure logic (`src/admin/summarize.ts` and friends), not component tests.
 
 ## Conventions
 
@@ -54,10 +56,18 @@ sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep 
   existing comments.
 - Keep game rules, map data, and simulation in `packages/shared`; keep all authority and validation
   on the server. The client only renders and sends intents.
+- The client builds two pages from one Vite config: the game (`index.html`) and the ops-only
+  profiling panel (`admin.html`, `src/admin/`). All UI lives in `apps/client`; `apps/server/src/admin.ts`
+  owns that panel's API and basic auth, and serves the built page. In dev the panel runs on the Vite
+  server at `/admin.html` and proxies `/admin/` to the game server.
 - New maps are `MapSource` modules in `packages/shared/src/maps/data/` with the generated
   `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Vite dev
   server only — commit the generated files.
 - Never commit secrets. `.env` is gitignored; `.env.example` documents the variables.
+- `.env` is only read by the *server process* via `@colyseus/tools` (and by `docker compose` for
+  `${VAR}` substitution) — Docker does not inject it into the container. Any env-gated server
+  feature (`MONITOR_*`, `ADMIN_*`, ...) must also be forwarded in the `game` service
+  `environment:` in `docker-compose.yml`, or it never reaches the container in production.
 - Add or update tests for behavior changes, especially in the shared engine and server rooms.
 
 ## Git workflow

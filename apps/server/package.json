@@ -22,6 +22,7 @@
   "dependencies": {
     "@colyseus/schema": "^5.0.20",
     "@colyseus/tools": "^0.18.2",
+    "@jridgewell/trace-mapping": "^0.3.31",
     "@tank-arena/shared": "workspace:*",
     "colyseus": "^0.18.4",
     "express": "^5.1.0"

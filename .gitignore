@@ -9,3 +9,8 @@ coverage
 .devmode.json
 .DS_Store
 deploy/certbot/
+
+# Agent skills are installed per machine, not part of the repo.
+.agents/
+.devin/skills/
+skills-lock.json

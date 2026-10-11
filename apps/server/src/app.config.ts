@@ -4,6 +4,7 @@ import { defineServer, defineRoom, LobbyRoom } from "colyseus";
 import express from "express";
 import { listMaps } from "@tank-arena/shared";
 import { gameRoom } from "./rooms/GameRoom.ts";
+import { adminMiddleware } from "./admin.ts";
 import { monitorMiddleware } from "./monitor.ts";
 
 export const GAME_ROOM = "game";
@@ -31,7 +32,19 @@ const server = defineServer({
       console.warn("[monitor] disabled: set MONITOR_PASSWORD to expose the /monitor panel");
     }
 
+    // Same gating as the monitor: open in development, password-protected in
+    // production, and not mounted at all without ADMIN_PASSWORD there.
+    const adminPanel = adminMiddleware({ clientDir: CLIENT_DIR });
+    if (adminPanel) {
+      app.use("/admin", adminPanel);
+    } else {
+      console.warn("[admin] disabled: set ADMIN_PASSWORD to expose the /admin profiling panel");
+    }
+
     if (existsSync(CLIENT_DIR)) {
+      // The panel is served, auth-gated, at /admin; don't also hand out the raw
+      // build output from the public static tree.
+      app.get("/admin.html", (_req, res) => res.redirect("/admin"));
       app.use(express.static(CLIENT_DIR));
     }
   },
