@@ -1,4 +1,4 @@
-import type { GameMap } from "../maps/types.ts";
+import type { GameMap, Rect } from "../maps/types.ts";
 import { PERK_BULLET_SPEED, PERK_TANK_SPEED, type GameRules } from "../rules.ts";
 import { circleHitsWall, circlesOverlap, moveCircle } from "./physics.ts";
 import { countBullets, maxBullets } from "./simulation.ts";
@@ -84,9 +84,12 @@ export interface BotState {
 
 const IDLE: PlayerInput = { throttle: 0, turn: 0, fire: false };
 const NAV_CELL = 10;
-const SHOT_DT = 1 / 60;
 const SHOT_MAX_SECONDS = 3;
 const SHOT_SAMPLES = 36;
+/** Contacts closer than this are treated as "at the current position" and ignored. */
+const SHOT_EPSILON = 1e-9;
+/** Seconds of travel used to step a bullet off a wall it just bounced on. */
+const SHOT_NUDGE = 1e-6;
 const AIM_TOLERANCE = 0.05;
 const STANDOFF = 110;
 const ARRIVE = 10;
@@ -135,13 +138,13 @@ export function resetBot(bot: BotState): void {
  * that a turn stops as soon as the heading it was aiming for is reached.
  */
 export function thinkBot(bot: BotState, world: Readonly<World>, map: GameMap, rules: GameRules, dt: number): PlayerInput {
-  const me = world.tanks.find((t) => t.slot === bot.slot);
-  if (!me || !me.alive) {
+  const myTank = world.tanks.find((tank) => tank.slot === bot.slot);
+  if (!myTank || !myTank.alive) {
     bot.input = IDLE;
     return IDLE;
   }
 
-  trackStuck(bot, me, rules, dt);
+  trackStuck(bot, myTank, rules, dt);
   if (bot.reverseTimer > 0) {
     bot.reverseTimer -= dt;
     bot.input = bot.reverseInput;
@@ -153,7 +156,7 @@ export function thinkBot(bot: BotState, world: Readonly<World>, map: GameMap, ru
   bot.dodgeTimer -= dt;
   if (bot.thinkTimer <= 0) {
     bot.thinkTimer = bot.profile.thinkInterval;
-    const steering = decide(bot, me, world, map, rules);
+    const steering = decide(bot, myTank, world, map, rules);
     bot.input = steering.input;
     bot.heading = steering.heading;
   } else if (bot.input.fire) {
@@ -162,29 +165,29 @@ export function thinkBot(bot: BotState, world: Readonly<World>, map: GameMap, ru
   }
 
   if (bot.heading !== undefined && bot.input.turn !== 0) {
-    const diff = angleDiff(bot.heading, me.angle);
-    const perTick = rules.tank.turnSpeed * dt;
-    const turn: -1 | 0 | 1 = Math.abs(diff) <= perTick ? 0 : diff > 0 ? 1 : -1;
+    const angleDelta = angleDiff(bot.heading, myTank.angle);
+    const maxTurnPerTick = rules.tank.turnSpeed * dt;
+    const turn: -1 | 0 | 1 = Math.abs(angleDelta) <= maxTurnPerTick ? 0 : angleDelta > 0 ? 1 : -1;
     if (turn !== bot.input.turn) bot.input = { ...bot.input, turn };
   }
   return bot.input;
 }
 
-function decide(bot: BotState, me: Tank, world: Readonly<World>, map: GameMap, rules: GameRules): Steering {
-  const enemies = world.tanks.filter((t) => t.alive && t.slot !== me.slot);
+function decide(bot: BotState, myTank: Tank, world: Readonly<World>, map: GameMap, rules: GameRules): Steering {
+  const enemies = world.tanks.filter((tank) => tank.alive && tank.slot !== myTank.slot);
   if (enemies.length === 0) return { input: IDLE };
-  const target = nearest(me, enemies)!;
+  const target = nearest(myTank, enemies)!;
 
-  const canFire = me.cooldown <= 0 && countBullets(world, me.slot) < maxBullets(me, rules);
-  const shot = canFire ? findShot(world, map, rules, me, target, bot.profile.maxShotBounces) : undefined;
+  const canFire = myTank.cooldown <= 0 && countBullets(world, myTank.slot) < maxBullets(myTank, rules);
+  const shot = canFire ? findShot(world, map, rules, myTank, target, bot.profile.maxShotBounces) : undefined;
 
   if (bot.profile.dodgeHorizon > 0) {
-    const threat = findThreat(world, map, rules, me, bot.profile.dodgeHorizon);
+    const threat = findThreat(world, map, rules, myTank, bot.profile.dodgeHorizon);
     // Keep escaping for the committed time even once we are barely clear, or we would turn straight back in.
     if (threat || (bot.dodgeDir && bot.dodgeTimer > 0)) {
-      const escape = dodge(bot, me, threat, map, rules);
+      const escape = dodge(bot, myTank, threat, map, rules);
       // Shoot back on the way out if we already happen to be lined up.
-      const fire = shot !== undefined && Math.abs(angleDiff(shot, me.angle)) < AIM_TOLERANCE;
+      const fire = shot !== undefined && Math.abs(angleDiff(shot, myTank.angle)) < AIM_TOLERANCE;
       return { input: { ...escape.input, fire }, heading: escape.heading };
     }
   }
@@ -192,27 +195,39 @@ function decide(bot: BotState, me: Tank, world: Readonly<World>, map: GameMap, r
 
   if (shot !== undefined) {
     const aim = shot + (random(bot) * 2 - 1) * bot.profile.aimError;
-    const diff = angleDiff(aim, me.angle);
-    if (Math.abs(diff) < AIM_TOLERANCE) return { input: { throttle: 0, turn: 0, fire: true } };
-    return { input: { throttle: 0, turn: diff > 0 ? 1 : -1, fire: false }, heading: aim };
+    const angleDelta = angleDiff(aim, myTank.angle);
+    if (Math.abs(angleDelta) < AIM_TOLERANCE) return { input: { throttle: 0, turn: 0, fire: true } };
+    return { input: { throttle: 0, turn: angleDelta > 0 ? 1 : -1, fire: false }, heading: aim };
   }
 
-  const goal = chooseGoal(bot, me, target, world);
-  const waypoint = navigate(bot, me, goal, map, rules);
+  const goal = chooseGoal(bot, myTank, target, world);
+  const waypoint = navigate(bot, myTank, goal, map, rules);
   if (!waypoint) {
     // Nowhere to go (boxed in or close enough): face the enemy so a shot opens up.
-    return face(me, target);
+    return face(myTank, target);
   }
-  return steer(me, waypoint, false);
+  return steer(myTank, waypoint, false);
 }
 
 // ---------------------------------------------------------------------------
 // Shooting
 
+/** Where a bullet leg meets a surface, and which velocity components reflect off it. */
+interface ShotImpact {
+  time: number;
+  reflectX: boolean;
+  reflectY: boolean;
+}
+
 /**
  * Trace a bullet fired from `shooter` at `angle` through the walls, with the
  * real bounce rules. Returns the first tank it would hit (or undefined if it
  * expires, exceeds `maxBounces`, or runs out of time).
+ *
+ * Bullets travel in straight lines at constant speed and reflect off the
+ * axis-aligned wall rectangles, so the path is solved analytically instead of
+ * stepped frame by frame: each leg is a ray swept against the walls (a circle
+ * vs. AABB test) and the tanks, and the earliest impact wins.
  */
 export function simulateShot(
   world: Readonly<World>,
@@ -226,7 +241,7 @@ export function simulateShot(
   const dirY = Math.sin(angle);
   const muzzle = rules.tank.radius + rules.bullet.radius + 1;
   const speed = rules.bullet.speed * (shooter.perks[PERK_BULLET_SPEED] > 0 ? rules.loot.bulletSpeedMultiplier : 1);
-  const r = rules.bullet.radius;
+  const bulletRadius = rules.bullet.radius;
   const tankRadius = rules.tank.radius;
   const canHitOwner = rules.bullet.canHitOwner;
 
@@ -235,27 +250,200 @@ export function simulateShot(
   let vx = dirX * speed;
   let vy = dirY * speed;
   let bounces = 0;
-  const steps = Math.ceil(SHOT_MAX_SECONDS / SHOT_DT);
+  let time = 0;
 
-  for (let i = 1; i <= steps; i++) {
-    const moved = moveCircle(map, x, y, r, vx * SHOT_DT, vy * SHOT_DT);
-    x = moved.x;
-    y = moved.y;
-    if (moved.hitX) vx = -vx;
-    if (moved.hitY) vy = -vy;
-    if (moved.hitX || moved.hitY) {
-      bounces++;
-      if (bounces > maxBounces || bounces >= rules.bullet.maxBounces) return undefined;
-    }
-    for (const tank of world.tanks) {
-      if (!tank.alive) continue;
-      if (tank.slot === shooter.slot && (!canHitOwner || bounces === 0)) continue;
-      if (circlesOverlap(x, y, r, tank.x, tank.y, tankRadius)) {
-        return { slot: tank.slot, bounces, time: i * SHOT_DT };
-      }
-    }
+  // Firing point-blank into a wall starts the bullet inside it; the step
+  // simulator pins it there until it expires, so the shot reaches nothing.
+  if (circleHitsWall(map, x, y, bulletRadius)) return undefined;
+
+  // The map border behaves like a wall for the bullet centre.
+  const borderMinX = bulletRadius;
+  const borderMinY = bulletRadius;
+  const borderMaxX = map.width - bulletRadius;
+  const borderMaxY = map.height - bulletRadius;
+
+  let remaining = SHOT_MAX_SECONDS;
+  while (remaining > 0) {
+    const wall = castShotRay(map.walls, bulletRadius, x, y, vx, vy, remaining, borderMinX, borderMinY, borderMaxX, borderMaxY);
+    const legTime = wall ? wall.time : remaining;
+    const hit = firstShotHit(world.tanks, x, y, vx, vy, legTime, bulletRadius, tankRadius, shooter.slot, canHitOwner, bounces);
+    if (hit) return { slot: hit.slot, bounces, time: time + hit.time };
+    if (!wall) return undefined;
+
+    x += vx * wall.time;
+    y += vy * wall.time;
+    time += wall.time;
+    remaining -= wall.time;
+    if (wall.reflectX) vx = -vx;
+    if (wall.reflectY) vy = -vy;
+    bounces++;
+    if (bounces > maxBounces || bounces >= rules.bullet.maxBounces) return undefined;
+
+    // Step a hair off the surface so the next leg cannot re-detect it.
+    x += vx * SHOT_NUDGE;
+    y += vy * SHOT_NUDGE;
+    time += SHOT_NUDGE;
+    remaining -= SHOT_NUDGE;
   }
   return undefined;
+}
+
+/**
+ * Earliest wall the leg from (x, y) along (vx, vy) meets within `maxTime`
+ * seconds, testing only the walls whose grown bounding box overlaps the leg's
+ * bounding box. Ties merge into a single impact that reflects every component
+ * involved.
+ */
+function castShotRay(
+  walls: readonly Rect[],
+  bulletRadius: number,
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  maxTime: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): ShotImpact | undefined {
+  let best: ShotImpact | undefined;
+  const consider = (time: number, reflectX: boolean, reflectY: boolean): void => {
+    if (time <= SHOT_EPSILON || time > maxTime) return;
+    if (!best || time < best.time - SHOT_EPSILON) {
+      best = { time, reflectX, reflectY };
+    } else if (time <= best.time + SHOT_EPSILON) {
+      best.reflectX ||= reflectX;
+      best.reflectY ||= reflectY;
+    }
+  };
+
+  // The border planes, hit only while heading out of the map.
+  if (vx < 0) consider((minX - x) / vx, true, false);
+  else if (vx > 0) consider((maxX - x) / vx, true, false);
+  if (vy < 0) consider((minY - y) / vy, false, true);
+  else if (vy > 0) consider((maxY - y) / vy, false, true);
+
+  const legMinX = Math.min(x, x + vx * maxTime);
+  const legMaxX = Math.max(x, x + vx * maxTime);
+  const legMinY = Math.min(y, y + vy * maxTime);
+  const legMaxY = Math.max(y, y + vy * maxTime);
+  for (const wall of walls) {
+    if (wall.x + wall.width + bulletRadius < legMinX || wall.x - bulletRadius > legMaxX || wall.y + wall.height + bulletRadius < legMinY || wall.y - bulletRadius > legMaxY) continue;
+    const hit = rayShotBox(wall, bulletRadius, x, y, vx, vy);
+    if (hit) consider(hit.time, hit.reflectX, hit.reflectY);
+  }
+  return best;
+}
+
+/**
+ * Entry point of a ray into the Minkowski sum of a wall and the bullet circle:
+ * the wall grown by `bulletRadius` with rounded corners. A ray only grazes past
+ * a corner if it stays more than `bulletRadius` from the rect, so a sharp grown
+ * box would wrongly block it; flat faces and quarter-circle corner arcs are
+ * tested separately.
+ */
+function rayShotBox(wall: Rect, bulletRadius: number, x: number, y: number, vx: number, vy: number): ShotImpact | undefined {
+  let best: ShotImpact | undefined;
+  const consider = (time: number, reflectX: boolean, reflectY: boolean): void => {
+    if (time <= SHOT_EPSILON) return;
+    if (!best || time < best.time - SHOT_EPSILON) best = { time, reflectX, reflectY };
+    else if (time <= best.time + SHOT_EPSILON) {
+      best.reflectX ||= reflectX;
+      best.reflectY ||= reflectY;
+    }
+  };
+
+  // Flat faces, over the wall's own extent (past that it is a rounded corner).
+  if (vx > 0) {
+    const hitTime = (wall.x - bulletRadius - x) / vx;
+    const faceY = y + vy * hitTime;
+    if (faceY >= wall.y && faceY <= wall.y + wall.height) consider(hitTime, true, false);
+  } else if (vx < 0) {
+    const hitTime = (wall.x + wall.width + bulletRadius - x) / vx;
+    const faceY = y + vy * hitTime;
+    if (faceY >= wall.y && faceY <= wall.y + wall.height) consider(hitTime, true, false);
+  }
+  if (vy > 0) {
+    const hitTime = (wall.y - bulletRadius - y) / vy;
+    const faceX = x + vx * hitTime;
+    if (faceX >= wall.x && faceX <= wall.x + wall.width) consider(hitTime, false, true);
+  } else if (vy < 0) {
+    const hitTime = (wall.y + wall.height + bulletRadius - y) / vy;
+    const faceX = x + vx * hitTime;
+    if (faceX >= wall.x && faceX <= wall.x + wall.width) consider(hitTime, false, true);
+  }
+
+  // Rounded corners: the centre sweeps a quarter arc of radius `bulletRadius`
+  // around the rect corner. Reflect the axis the contact normal leans towards.
+  const speedSq = vx * vx + vy * vy;
+  const corner = (cornerX: number, cornerY: number): void => {
+    const offsetX = x - cornerX;
+    const offsetY = y - cornerY;
+    const constant = offsetX * offsetX + offsetY * offsetY - bulletRadius * bulletRadius;
+    if (constant < 0) return;
+    const dot = offsetX * vx + offsetY * vy;
+    const discriminant = dot * dot - speedSq * constant;
+    if (discriminant < 0) return;
+    const hitTime = (-dot - Math.sqrt(discriminant)) / speedSq;
+    if (hitTime <= SHOT_EPSILON) return;
+    const hitX = x + vx * hitTime - cornerX;
+    const hitY = y + vy * hitTime - cornerY;
+    // Only the arc facing outward from this corner counts; elsewhere a face is nearer.
+    if ((cornerX === wall.x ? hitX <= 0 : hitX >= 0) && (cornerY === wall.y ? hitY <= 0 : hitY >= 0)) {
+      consider(hitTime, Math.abs(hitX) >= Math.abs(hitY), Math.abs(hitY) >= Math.abs(hitX));
+    }
+  };
+  corner(wall.x, wall.y);
+  corner(wall.x + wall.width, wall.y);
+  corner(wall.x, wall.y + wall.height);
+  corner(wall.x + wall.width, wall.y + wall.height);
+  return best;
+}
+
+/**
+ * Earliest tank the leg from (x, y) along (vx, vy) overlaps within `maxTime`
+ * seconds. The bullet and tank are circles, so contact is the first root of a
+ * quadratic distance test.
+ */
+function firstShotHit(
+  tanks: readonly Tank[],
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  maxTime: number,
+  bulletRadius: number,
+  tankRadius: number,
+  shooterSlot: number,
+  canHitOwner: boolean,
+  bounces: number,
+): { slot: number; time: number } | undefined {
+  const reachSq = (bulletRadius + tankRadius) ** 2;
+  const speedSq = vx * vx + vy * vy;
+  let best: { slot: number; time: number } | undefined;
+
+  for (const tank of tanks) {
+    if (!tank.alive) continue;
+    if (tank.slot === shooterSlot && (!canHitOwner || bounces === 0)) continue;
+
+    const offsetX = x - tank.x;
+    const offsetY = y - tank.y;
+    const constant = offsetX * offsetX + offsetY * offsetY - reachSq;
+    let hitTime: number;
+    if (constant < 0) {
+      hitTime = 0;
+    } else {
+      const dot = offsetX * vx + offsetY * vy;
+      if (dot >= 0) continue;
+      const discriminant = dot * dot - speedSq * constant;
+      if (discriminant < 0) continue;
+      hitTime = (-dot - Math.sqrt(discriminant)) / speedSq;
+    }
+    if (hitTime > maxTime) continue;
+    if (!best || hitTime < best.time) best = { slot: tank.slot, time: hitTime };
+  }
+  return best;
 }
 
 /**
@@ -297,8 +485,8 @@ export function findShot(
     if (shooter.y > bottom) consider(Math.atan2(2 * bottom - target.y - shooter.y, target.x - shooter.x));
   }
   if (best === undefined && maxBounces > 1) {
-    for (let i = 0; i < SHOT_SAMPLES; i++) {
-      consider(shooter.angle + (i / SHOT_SAMPLES) * Math.PI * 2);
+    for (let sample = 0; sample < SHOT_SAMPLES; sample++) {
+      consider(shooter.angle + (sample / SHOT_SAMPLES) * Math.PI * 2);
     }
   }
   return best?.angle;
@@ -313,17 +501,17 @@ interface Threat {
   time: number;
 }
 
-/** Earliest bullet predicted to touch `me` within `horizon` seconds. */
-export function findThreat(world: Readonly<World>, map: GameMap, rules: GameRules, me: Tank, horizon: number): Threat | undefined {
-  const r = rules.bullet.radius;
-  const danger = rules.tank.radius + rules.bullet.radius + 6;
+/** Earliest bullet predicted to touch `myTank` within `horizon` seconds. */
+export function findThreat(world: Readonly<World>, map: GameMap, rules: GameRules, myTank: Tank, horizon: number): Threat | undefined {
+  const bulletRadius = rules.bullet.radius;
+  const dangerRadius = rules.tank.radius + rules.bullet.radius + 6;
   const dt = 1 / rules.tickRate;
   const steps = Math.ceil(horizon / dt);
   let best: Threat | undefined;
 
   for (const bullet of world.bullets) {
-    if (bullet.ownerSlot === me.slot && !rules.bullet.canHitOwner) continue;
-    const time = predictImpact(map, rules, bullet, me, r, danger, dt, steps);
+    if (bullet.ownerSlot === myTank.slot && !rules.bullet.canHitOwner) continue;
+    const time = predictImpact(map, rules, bullet, myTank, bulletRadius, dangerRadius, dt, steps);
     if (time !== undefined && (!best || time < best.time)) {
       best = { vx: bullet.vx, vy: bullet.vy, time };
     }
@@ -335,16 +523,16 @@ function predictImpact(
   map: GameMap,
   rules: GameRules,
   bullet: Bullet,
-  me: Tank,
-  r: number,
-  danger: number,
+  myTank: Tank,
+  bulletRadius: number,
+  dangerRadius: number,
   dt: number,
   steps: number,
 ): number | undefined {
   let { x, y, vx, vy, bounces } = bullet;
-  const ownBullet = bullet.ownerSlot === me.slot;
-  for (let i = 1; i <= steps; i++) {
-    const moved = moveCircle(map, x, y, r, vx * dt, vy * dt);
+  const ownBullet = bullet.ownerSlot === myTank.slot;
+  for (let step = 1; step <= steps; step++) {
+    const moved = moveCircle(map, x, y, bulletRadius, vx * dt, vy * dt);
     x = moved.x;
     y = moved.y;
     if (moved.hitX) vx = -vx;
@@ -355,7 +543,7 @@ function predictImpact(
     }
     // Our own fresh bullet is flying away; the sim ignores it until it bounces.
     if (ownBullet && bounces === 0) continue;
-    if (circlesOverlap(x, y, 0, me.x, me.y, danger)) return i * dt;
+    if (circlesOverlap(x, y, 0, myTank.x, myTank.y, dangerRadius)) return step * dt;
   }
   return undefined;
 }
@@ -365,36 +553,36 @@ function predictImpact(
  * the side with more room and whichever of forward/reverse needs less turning.
  * Re-deciding every think would flip the choice as the heading crosses 90°.
  */
-function dodge(bot: BotState, me: Tank, threat: Threat | undefined, map: GameMap, rules: GameRules): Steering {
+function dodge(bot: BotState, myTank: Tank, threat: Threat | undefined, map: GameMap, rules: GameRules): Steering {
   const reach = rules.tank.speed * 0.6;
   const blocked =
     bot.dodgeDir !== undefined &&
-    freeDistance(map, me.x, me.y, bot.dodgeDir.x, bot.dodgeDir.y, rules.tank.radius, reach) < rules.tank.radius;
+    freeDistance(map, myTank.x, myTank.y, bot.dodgeDir.x, bot.dodgeDir.y, rules.tank.radius, reach) < rules.tank.radius;
   if (threat && (!bot.dodgeDir || bot.dodgeTimer <= 0 || blocked)) {
-    const len = Math.hypot(threat.vx, threat.vy) || 1;
-    const px = -threat.vy / len;
-    const py = threat.vx / len;
-    const a = freeDistance(map, me.x, me.y, px, py, rules.tank.radius, reach);
-    const b = freeDistance(map, me.x, me.y, -px, -py, rules.tank.radius, reach);
-    bot.dodgeDir = a >= b ? { x: px, y: py } : { x: -px, y: -py };
-    const desired = Math.atan2(bot.dodgeDir.y, bot.dodgeDir.x);
-    bot.dodgeThrottle = Math.abs(angleDiff(desired, me.angle)) > Math.PI / 2 ? -1 : 1;
+    const length = Math.hypot(threat.vx, threat.vy) || 1;
+    const perpX = -threat.vy / length;
+    const perpY = threat.vx / length;
+    const roomAlongPerp = freeDistance(map, myTank.x, myTank.y, perpX, perpY, rules.tank.radius, reach);
+    const roomOppositePerp = freeDistance(map, myTank.x, myTank.y, -perpX, -perpY, rules.tank.radius, reach);
+    bot.dodgeDir = roomAlongPerp >= roomOppositePerp ? { x: perpX, y: perpY } : { x: -perpX, y: -perpY };
+    const desiredHeading = Math.atan2(bot.dodgeDir.y, bot.dodgeDir.x);
+    bot.dodgeThrottle = Math.abs(angleDiff(desiredHeading, myTank.angle)) > Math.PI / 2 ? -1 : 1;
     bot.dodgeTimer = Math.max(0.3, threat.time);
   }
-  const dir = bot.dodgeDir!;
-  const desired = Math.atan2(dir.y, dir.x) + (bot.dodgeThrottle < 0 ? Math.PI : 0);
-  const diff = angleDiff(desired, me.angle);
-  const turn: -1 | 0 | 1 = Math.abs(diff) < 0.08 ? 0 : diff > 0 ? 1 : -1;
-  return { input: { throttle: bot.dodgeThrottle, turn, fire: false }, heading: desired };
+  const escapeDir = bot.dodgeDir!;
+  const desiredHeading = Math.atan2(escapeDir.y, escapeDir.x) + (bot.dodgeThrottle < 0 ? Math.PI : 0);
+  const angleDelta = angleDiff(desiredHeading, myTank.angle);
+  const turn: -1 | 0 | 1 = Math.abs(angleDelta) < 0.08 ? 0 : angleDelta > 0 ? 1 : -1;
+  return { input: { throttle: bot.dodgeThrottle, turn, fire: false }, heading: desiredHeading };
 }
 
-/** How far the tank can slide along (dx,dy) before touching a wall, up to `max`. */
-function freeDistance(map: GameMap, x: number, y: number, dx: number, dy: number, radius: number, max: number): number {
+/** How far the tank can slide along (dx,dy) before touching a wall, up to `maxDistance`. */
+function freeDistance(map: GameMap, x: number, y: number, dx: number, dy: number, radius: number, maxDistance: number): number {
   const step = 6;
-  for (let d = step; d <= max; d += step) {
-    if (circleHitsWall(map, x + dx * d, y + dy * d, radius)) return d - step;
+  for (let distance = step; distance <= maxDistance; distance += step) {
+    if (circleHitsWall(map, x + dx * distance, y + dy * distance, radius)) return distance - step;
   }
-  return max;
+  return maxDistance;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,38 +592,38 @@ interface Goal extends Point {
   kind: "enemy" | "loot";
 }
 
-function chooseGoal(bot: BotState, me: Tank, target: Tank, world: Readonly<World>): Goal {
+function chooseGoal(bot: BotState, myTank: Tank, target: Tank, world: Readonly<World>): Goal {
   const { lootAppetite, lootRange } = bot.profile;
   if (lootAppetite > 0 && world.loot.length > 0) {
-    const box = nearest(me, world.loot)!;
-    const dist = Math.hypot(box.x - me.x, box.y - me.y);
+    const lootBox = nearest(myTank, world.loot)!;
+    const distance = Math.hypot(lootBox.x - myTank.x, lootBox.y - myTank.y);
     // Keep heading for a box once committed, otherwise roll for it.
-    const committed = bot.goal !== undefined && bot.goal.x === box.x && bot.goal.y === box.y;
-    if (dist <= lootRange && (committed || random(bot) < lootAppetite)) return { x: box.x, y: box.y, kind: "loot" };
+    const committed = bot.goal !== undefined && bot.goal.x === lootBox.x && bot.goal.y === lootBox.y;
+    if (distance <= lootRange && (committed || random(bot) < lootAppetite)) return { x: lootBox.x, y: lootBox.y, kind: "loot" };
   }
   return { x: target.x, y: target.y, kind: "enemy" };
 }
 
-function navigate(bot: BotState, me: Tank, goal: Goal, map: GameMap, rules: GameRules): Point | undefined {
-  const toGoal = Math.hypot(goal.x - me.x, goal.y - me.y);
+function navigate(bot: BotState, myTank: Tank, goal: Goal, map: GameMap, rules: GameRules): Point | undefined {
+  const distanceToGoal = Math.hypot(goal.x - myTank.x, goal.y - myTank.y);
   // Close enough: stop driving into the enemy (or we are on the loot box already).
-  if (toGoal < (goal.kind === "enemy" ? STANDOFF : ARRIVE)) return undefined;
+  if (distanceToGoal < (goal.kind === "enemy" ? STANDOFF : ARRIVE)) return undefined;
 
   const grid = navGrid(bot, map, rules);
-  const moved = bot.goal === undefined || Math.hypot(goal.x - bot.goal.x, goal.y - bot.goal.y) > grid.cell * 2;
-  if (!bot.field || moved || bot.fieldTimer <= 0) {
+  const goalMoved = bot.goal === undefined || Math.hypot(goal.x - bot.goal.x, goal.y - bot.goal.y) > grid.cell * 2;
+  if (!bot.field || goalMoved || bot.fieldTimer <= 0) {
     bot.goal = goal;
     bot.field = distanceField(grid, goal);
     bot.fieldTimer = 0.5;
   }
 
-  const path = descend(grid, bot.field, me);
+  const path = descend(grid, bot.field, myTank);
   if (path.length === 0) {
-    return lineClear(map, me, goal, rules.tank.radius) ? goal : undefined;
+    return lineClear(map, myTank, goal, rules.tank.radius) ? goal : undefined;
   }
   // Follow the farthest waypoint we can drive straight to (string-pulling).
-  for (let i = path.length - 1; i >= 0; i -= 2) {
-    if (lineClear(map, me, path[i]!, rules.tank.radius)) return path[i];
+  for (let index = path.length - 1; index >= 0; index -= 2) {
+    if (lineClear(map, myTank, path[index]!, rules.tank.radius)) return path[index];
   }
   return path[0];
 }
@@ -447,19 +635,19 @@ function navGrid(bot: BotState, map: GameMap, rules: GameRules): NavGrid {
   const rows = Math.ceil(map.height / cell);
   const blocked = new Uint8Array(cols * rows);
   const clearance = rules.tank.radius + 0.5;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (circleHitsWall(map, (c + 0.5) * cell, (r + 0.5) * cell, clearance)) blocked[r * cols + c] = 1;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      if (circleHitsWall(map, (col + 0.5) * cell, (row + 0.5) * cell, clearance)) blocked[row * cols + col] = 1;
     }
   }
   bot.grid = { mapId: map.id, cell, cols, rows, blocked };
   return bot.grid;
 }
 
-function cellOf(grid: NavGrid, p: Point): number {
-  const c = Math.min(grid.cols - 1, Math.max(0, Math.floor(p.x / grid.cell)));
-  const r = Math.min(grid.rows - 1, Math.max(0, Math.floor(p.y / grid.cell)));
-  return r * grid.cols + c;
+function cellOf(grid: NavGrid, point: Point): number {
+  const col = Math.min(grid.cols - 1, Math.max(0, Math.floor(point.x / grid.cell)));
+  const row = Math.min(grid.rows - 1, Math.max(0, Math.floor(point.y / grid.cell)));
+  return row * grid.cols + col;
 }
 
 function centerOf(grid: NavGrid, index: number): Point {
@@ -472,15 +660,15 @@ function centerOf(grid: NavGrid, index: number): Point {
 /** Nearest walkable cell to `index` (itself if walkable), searching outward in rings. */
 function walkableNear(grid: NavGrid, index: number): number {
   if (!grid.blocked[index]) return index;
-  const c0 = index % grid.cols;
-  const r0 = Math.floor(index / grid.cols);
+  const originCol = index % grid.cols;
+  const originRow = Math.floor(index / grid.cols);
   for (let ring = 1; ring < Math.max(grid.cols, grid.rows); ring++) {
-    for (let r = r0 - ring; r <= r0 + ring; r++) {
-      for (let c = c0 - ring; c <= c0 + ring; c++) {
-        if (Math.abs(r - r0) !== ring && Math.abs(c - c0) !== ring) continue;
-        if (r < 0 || c < 0 || r >= grid.rows || c >= grid.cols) continue;
-        const i = r * grid.cols + c;
-        if (!grid.blocked[i]) return i;
+    for (let row = originRow - ring; row <= originRow + ring; row++) {
+      for (let col = originCol - ring; col <= originCol + ring; col++) {
+        if (Math.abs(row - originRow) !== ring && Math.abs(col - originCol) !== ring) continue;
+        if (row < 0 || col < 0 || row >= grid.rows || col >= grid.cols) continue;
+        const candidate = row * grid.cols + col;
+        if (!grid.blocked[candidate]) return candidate;
       }
     }
   }
@@ -497,43 +685,43 @@ function distanceField(grid: NavGrid, goal: Point): Int32Array {
   field[start] = 0;
   queue[tail++] = start;
   while (head < tail) {
-    const i = queue[head++]!;
-    const d = field[i]! + 1;
-    const c = i % grid.cols;
-    const r = Math.floor(i / grid.cols);
-    const visit = (j: number) => {
-      if (grid.blocked[j] || field[j] !== -1) return;
-      field[j] = d;
-      queue[tail++] = j;
+    const index = queue[head++]!;
+    const nextDistance = field[index]! + 1;
+    const col = index % grid.cols;
+    const row = Math.floor(index / grid.cols);
+    const visit = (neighbor: number) => {
+      if (grid.blocked[neighbor] || field[neighbor] !== -1) return;
+      field[neighbor] = nextDistance;
+      queue[tail++] = neighbor;
     };
-    if (c > 0) visit(i - 1);
-    if (c < grid.cols - 1) visit(i + 1);
-    if (r > 0) visit(i - grid.cols);
-    if (r < grid.rows - 1) visit(i + grid.cols);
+    if (col > 0) visit(index - 1);
+    if (col < grid.cols - 1) visit(index + 1);
+    if (row > 0) visit(index - grid.cols);
+    if (row < grid.rows - 1) visit(index + grid.cols);
   }
   return field;
 }
 
 /** Walk downhill on the distance field from the tank's cell to the goal cell. */
-function descend(grid: NavGrid, field: Int32Array, me: Tank): Point[] {
-  let i = walkableNear(grid, cellOf(grid, me));
-  if (field[i]! < 0) return [];
+function descend(grid: NavGrid, field: Int32Array, myTank: Tank): Point[] {
+  let index = walkableNear(grid, cellOf(grid, myTank));
+  if (field[index]! < 0) return [];
   const path: Point[] = [];
   let guard = grid.cols * grid.rows;
-  while (field[i]! > 0 && guard-- > 0) {
-    const c = i % grid.cols;
-    const r = Math.floor(i / grid.cols);
-    let next = i;
-    const tryCell = (j: number) => {
-      if (field[j]! >= 0 && field[j]! < field[next]!) next = j;
+  while (field[index]! > 0 && guard-- > 0) {
+    const col = index % grid.cols;
+    const row = Math.floor(index / grid.cols);
+    let next = index;
+    const tryCell = (neighbor: number) => {
+      if (field[neighbor]! >= 0 && field[neighbor]! < field[next]!) next = neighbor;
     };
-    if (c > 0) tryCell(i - 1);
-    if (c < grid.cols - 1) tryCell(i + 1);
-    if (r > 0) tryCell(i - grid.cols);
-    if (r < grid.rows - 1) tryCell(i + grid.cols);
-    if (next === i) break;
-    i = next;
-    path.push(centerOf(grid, i));
+    if (col > 0) tryCell(index - 1);
+    if (col < grid.cols - 1) tryCell(index + 1);
+    if (row > 0) tryCell(index - grid.cols);
+    if (row < grid.rows - 1) tryCell(index + grid.cols);
+    if (next === index) break;
+    index = next;
+    path.push(centerOf(grid, index));
   }
   return path;
 }
@@ -542,11 +730,11 @@ function descend(grid: NavGrid, field: Int32Array, me: Tank): Point[] {
 function lineClear(map: GameMap, from: Point, to: Point, radius: number): boolean {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const dist = Math.hypot(dx, dy);
-  const steps = Math.max(1, Math.ceil(dist / 6));
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    if (circleHitsWall(map, from.x + dx * t, from.y + dy * t, radius)) return false;
+  const distance = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(distance / 6));
+  for (let step = 1; step <= steps; step++) {
+    const fraction = step / steps;
+    if (circleHitsWall(map, from.x + dx * fraction, from.y + dy * fraction, radius)) return false;
   }
   return true;
 }
@@ -554,37 +742,37 @@ function lineClear(map: GameMap, from: Point, to: Point, radius: number): boolea
 // ---------------------------------------------------------------------------
 // Steering
 
-/** Turn toward `to` and drive; reverses when that is quicker and allowed. */
-function steer(me: Tank, to: Point, allowReverse: boolean): Steering {
-  const desired = Math.atan2(to.y - me.y, to.x - me.x);
-  let heading = desired;
-  let diff = angleDiff(desired, me.angle);
+/** Turn toward `destination` and drive; reverses when that is quicker and allowed. */
+function steer(myTank: Tank, destination: Point, allowReverse: boolean): Steering {
+  const desiredHeading = Math.atan2(destination.y - myTank.y, destination.x - myTank.x);
+  let heading = desiredHeading;
+  let angleDelta = angleDiff(desiredHeading, myTank.angle);
   let throttle: -1 | 0 | 1 = 1;
-  if (allowReverse && Math.abs(diff) > Math.PI / 2) {
-    heading = desired + Math.PI;
-    diff = angleDiff(heading, me.angle);
+  if (allowReverse && Math.abs(angleDelta) > Math.PI / 2) {
+    heading = desiredHeading + Math.PI;
+    angleDelta = angleDiff(heading, myTank.angle);
     throttle = -1;
-  } else if (Math.abs(diff) > 1) {
+  } else if (Math.abs(angleDelta) > 1) {
     throttle = 0;
   }
-  const turn: -1 | 0 | 1 = Math.abs(diff) < 0.08 ? 0 : diff > 0 ? 1 : -1;
+  const turn: -1 | 0 | 1 = Math.abs(angleDelta) < 0.08 ? 0 : angleDelta > 0 ? 1 : -1;
   return { input: { throttle, turn, fire: false }, heading };
 }
 
 /** Turn in place to point at `target`. */
-function face(me: Tank, target: Point): Steering {
-  const heading = Math.atan2(target.y - me.y, target.x - me.x);
-  const diff = angleDiff(heading, me.angle);
-  const turn: -1 | 0 | 1 = Math.abs(diff) < AIM_TOLERANCE ? 0 : diff > 0 ? 1 : -1;
+function face(myTank: Tank, target: Point): Steering {
+  const heading = Math.atan2(target.y - myTank.y, target.x - myTank.x);
+  const angleDelta = angleDiff(heading, myTank.angle);
+  const turn: -1 | 0 | 1 = Math.abs(angleDelta) < AIM_TOLERANCE ? 0 : angleDelta > 0 ? 1 : -1;
   return { input: { throttle: 0, turn, fire: false }, heading };
 }
 
-function trackStuck(bot: BotState, me: Tank, rules: GameRules, dt: number): void {
-  const wanted = bot.input.throttle !== 0 && bot.reverseTimer <= 0;
-  if (wanted && Number.isFinite(bot.lastX)) {
-    const moved = Math.hypot(me.x - bot.lastX, me.y - bot.lastY);
-    const speed = rules.tank.speed * (me.perks[PERK_TANK_SPEED] > 0 ? rules.loot.tankSpeedMultiplier : 1);
-    if (moved < speed * dt * 0.2) {
+function trackStuck(bot: BotState, myTank: Tank, rules: GameRules, dt: number): void {
+  const wantsToMove = bot.input.throttle !== 0 && bot.reverseTimer <= 0;
+  if (wantsToMove && Number.isFinite(bot.lastX)) {
+    const movedDistance = Math.hypot(myTank.x - bot.lastX, myTank.y - bot.lastY);
+    const speed = rules.tank.speed * (myTank.perks[PERK_TANK_SPEED] > 0 ? rules.loot.tankSpeedMultiplier : 1);
+    if (movedDistance < speed * dt * 0.2) {
       bot.stuckTime += dt;
       if (bot.stuckTime > 0.5) {
         bot.stuckTime = 0;
@@ -599,8 +787,8 @@ function trackStuck(bot: BotState, me: Tank, rules: GameRules, dt: number): void
   } else {
     bot.stuckTime = 0;
   }
-  bot.lastX = me.x;
-  bot.lastY = me.y;
+  bot.lastX = myTank.x;
+  bot.lastY = myTank.y;
 }
 
 // ---------------------------------------------------------------------------
@@ -610,29 +798,29 @@ function nearest<T extends Point>(from: Point, items: readonly T[]): T | undefin
   let best: T | undefined;
   let bestDist = Infinity;
   for (const item of items) {
-    const d = Math.hypot(item.x - from.x, item.y - from.y);
-    if (d < bestDist) {
-      bestDist = d;
+    const distance = Math.hypot(item.x - from.x, item.y - from.y);
+    if (distance < bestDist) {
+      bestDist = distance;
       best = item;
     }
   }
   return best;
 }
 
-/** Signed shortest rotation from `from` to `to`, in (-π, π]. */
-export function angleDiff(to: number, from: number): number {
-  let d = (to - from) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d <= -Math.PI) d += Math.PI * 2;
-  return d;
+/** Signed shortest rotation from `fromAngle` to `targetAngle`, in (-π, π]. */
+export function angleDiff(targetAngle: number, fromAngle: number): number {
+  let delta = (targetAngle - fromAngle) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta <= -Math.PI) delta += Math.PI * 2;
+  return delta;
 }
 
 /** xorshift32 on the bot's own seed: deterministic per (seed, decision sequence). */
 function random(bot: BotState): number {
-  let x = bot.rng | 0;
-  x ^= x << 13;
-  x ^= x >>> 17;
-  x ^= x << 5;
-  bot.rng = x;
-  return (x >>> 0) / 0x100000000;
+  let state = bot.rng | 0;
+  state ^= state << 13;
+  state ^= state >>> 17;
+  state ^= state << 5;
+  bot.rng = state;
+  return (state >>> 0) / 0x100000000;
 }
