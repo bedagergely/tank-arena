@@ -2,21 +2,27 @@
   "name": "tank-arena",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@12.4.2",
+  "packageManager": "bun@1.4.3",
   "type": "module",
   "description": "Multiplayer browser tank game: Colyseus server, PixiJS + React client",
   "engines": {
-    "node": ">=22",
-    "pnpm": ">=10"
+    "bun": ">=1.4"
   },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "trustedDependencies": [
+    "esbuild"
+  ],
   "scripts": {
-    "dev": "pnpm -r --parallel --filter @tank-arena/server --filter @tank-arena/client run dev",
-    "dev:server": "pnpm --filter @tank-arena/server run dev",
-    "dev:client": "pnpm --filter @tank-arena/client run dev",
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "typecheck": "pnpm -r run typecheck",
-    "lint": "eslint ."
+    "dev": "bun --bun run --parallel --filter @tank-arena/server --filter @tank-arena/client run dev",
+    "dev:server": "bun --bun run --filter @tank-arena/server run dev",
+    "dev:client": "bun --bun run --filter @tank-arena/client run dev",
+    "build": "bun --bun run --workspaces --if-present build",
+    "test": "bun --bun run --workspaces --if-present test",
+    "typecheck": "bun --bun run --workspaces --if-present typecheck",
+    "lint": "bun --bun run eslint ."
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

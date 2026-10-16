@@ -3,7 +3,6 @@ import type { SnapshotInfo } from "@tank-arena/server/profiler";
 
 export interface AdminStatus {
   cpuRunning: boolean;
-  heapSamplingRunning: boolean;
 }
 
 /**
@@ -28,8 +27,6 @@ export const startCpuProfile = () => request("/cpu/start", "POST");
 export const stopCpuProfile = () => request<{ snapshot: SnapshotInfo }>("/cpu/stop", "POST");
 
 export const takeHeapSnapshot = () => request<{ snapshot: SnapshotInfo }>("/heap/snapshot", "POST");
-export const startHeapSampling = () => request("/heap/start", "POST");
-export const stopHeapSampling = () => request<{ snapshot: SnapshotInfo }>("/heap/stop", "POST");
 
 export const snapshotUrl = (name: string) => `${BASE}/snapshots/${encodeURIComponent(name)}`;
 

@@ -25,7 +25,7 @@ export interface ProfileSummary {
   note: string;
 }
 
-export type ProfileKind = "cpu" | "heap" | "heapsampling";
+export type ProfileKind = "cpu" | "heap";
 
 const TOP_ROWS = 15;
 const TOP_TYPES = 8;
@@ -270,63 +270,6 @@ export function summarizeHeapSnapshot(input: unknown): ProfileSummary {
   };
 }
 
-/**
- * Sampling heap profile: a tree of call frames, each carrying the bytes
- * allocated directly in it — the closest thing V8 gives to "which functions
- * are using the memory".
- */
-export function summarizeHeapProfile(input: unknown): ProfileSummary {
-  const json = asRecord(input);
-  const head = asRecord(json?.head);
-  if (head === null) notAProfile("heap sampling");
-
-  const byFunction = new Map<string, Tally>();
-  const frames = new Map<string, CallFrame>();
-  let total = 0;
-  const stack: Record<string, unknown>[] = [head];
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    const size = typeof node.selfSize === "number" ? node.selfSize : 0;
-    const frame = asRecord(node.callFrame) as CallFrame | null;
-    if (size > 0 && frame !== null) {
-      const key = frameKey(frame);
-      add(byFunction, key, size);
-      frames.set(key, frame);
-      total += size;
-    }
-    if (Array.isArray(node.children)) {
-      for (const child of node.children as Record<string, unknown>[]) {
-        const record = asRecord(child);
-        if (record !== null) stack.push(record);
-      }
-    }
-  }
-
-  const rows = [...byFunction.entries()]
-    .sort((a, b) => b[1].size - a[1].size)
-    .slice(0, TOP_ROWS)
-    .map(([key, tally]) => {
-      const frame = frames.get(key) ?? {};
-      return {
-        name: truncate(frameName(frame), 48),
-        detail: frameLocation(frame),
-        value: formatBytes(tally.size),
-        share: total > 0 ? tally.size / total : 0,
-      };
-    });
-
-  return {
-    stats: [
-      { label: "Sampled", value: formatBytes(total) },
-      { label: "Functions", value: byFunction.size.toLocaleString() },
-    ],
-    sections: [{ title: "Top allocating functions", valueLabel: "Allocated", rows }],
-    note: "Bytes allocated in each function, sampled while the profile ran.",
-  };
-}
-
 export function summarize(kind: ProfileKind, data: unknown): ProfileSummary {
-  if (kind === "cpu") return summarizeCpuProfile(data);
-  if (kind === "heap") return summarizeHeapSnapshot(data);
-  return summarizeHeapProfile(data);
+  return kind === "cpu" ? summarizeCpuProfile(data) : summarizeHeapSnapshot(data);
 }

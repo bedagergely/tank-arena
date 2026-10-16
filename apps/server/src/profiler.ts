@@ -3,7 +3,13 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { remapProfile, type CpuProfile } from "./sourcemap.ts";
 
-export type SnapshotKind = "cpu" | "heap" | "heapsampling";
+/**
+ * Bun's heap-snapshot API. Declared locally rather than through `@types/bun` so
+ * the browser client, which imports this module's types, stays free of Bun globals.
+ */
+declare const Bun: { generateHeapSnapshot(format?: "v8" | "jsc"): string };
+
+export type SnapshotKind = "cpu" | "heap";
 
 export interface SnapshotInfo {
   name: string;
@@ -18,12 +24,9 @@ export class ProfilerStateError extends Error {}
 
 export interface Profiler {
   readonly cpuRunning: boolean;
-  readonly heapSamplingRunning: boolean;
   startCpuProfile(): Promise<void>;
   stopCpuProfile(): Promise<SnapshotInfo>;
   takeHeapSnapshot(): Promise<SnapshotInfo>;
-  startHeapSampling(): Promise<void>;
-  stopHeapSampling(): Promise<SnapshotInfo>;
   listSnapshots(): Promise<SnapshotInfo[]>;
   /** Absolute path of a stored snapshot, or `null` when the name is not a snapshot we recorded. */
   resolveSnapshot(name: string): string | null;
@@ -32,10 +35,7 @@ export interface Profiler {
 const EXTENSIONS: Record<SnapshotKind, string> = {
   cpu: ".cpuprofile",
   heap: ".heapsnapshot",
-  heapsampling: ".heapprofile",
 };
-
-const SAMPLING_INTERVAL_BYTES = 32768;
 
 /** Promisified `session.post`, which only exposes callbacks. */
 function post<T>(session: Session, method: string, params?: object): Promise<T> {
@@ -59,13 +59,14 @@ function fileStamp(): string {
 }
 
 /**
- * Profilers backed by Node's built-in inspector. Snapshots are written into
+ * CPU profiles come from Node's built-in inspector (which Bun implements);
+ * heap snapshots come from `Bun.generateHeapSnapshot`, since Bun's inspector
+ * does not implement the `HeapProfiler` domain. Snapshots are written into
  * `dir` and served back by the admin panel; nothing is kept in memory beyond
  * the profile currently being recorded.
  */
-export function createInspectorProfiler(dir: string): Profiler {
+export function createProfiler(dir: string): Profiler {
   let cpuSession: Session | null = null;
-  let samplingSession: Session | null = null;
 
   async function describe(name: string): Promise<SnapshotInfo | null> {
     const kind = kindFromName(name);
@@ -91,10 +92,6 @@ export function createInspectorProfiler(dir: string): Profiler {
   return {
     get cpuRunning() {
       return cpuSession !== null;
-    },
-
-    get heapSamplingRunning() {
-      return samplingSession !== null;
     },
 
     async startCpuProfile() {
@@ -125,46 +122,8 @@ export function createInspectorProfiler(dir: string): Profiler {
     },
 
     async takeHeapSnapshot() {
-      const session = new Session();
-      session.connect();
-      const chunks: string[] = [];
-      session.on("HeapProfiler.addHeapSnapshotChunk", (message: { params: { chunk: string } }) => {
-        chunks.push(message.params.chunk);
-      });
-      try {
-        await post(session, "HeapProfiler.enable");
-        await post(session, "HeapProfiler.takeHeapSnapshot", { reportProgress: false });
-        return await record("heap", chunks.join(""));
-      } finally {
-        session.disconnect();
-      }
-    },
-
-    async startHeapSampling() {
-      if (samplingSession) throw new ProfilerStateError("Heap sampling is already running");
-      const session = new Session();
-      session.connect();
-      samplingSession = session;
-      try {
-        await post(session, "HeapProfiler.enable");
-        await post(session, "HeapProfiler.startSampling", { samplingInterval: SAMPLING_INTERVAL_BYTES });
-      } catch (err) {
-        samplingSession = null;
-        session.disconnect();
-        throw err;
-      }
-    },
-
-    async stopHeapSampling() {
-      const session = samplingSession;
-      if (!session) throw new ProfilerStateError("Heap sampling is not running");
-      samplingSession = null;
-      try {
-        const { profile } = await post<{ profile: unknown }>(session, "HeapProfiler.stopSampling");
-        return await record("heapsampling", JSON.stringify(profile));
-      } finally {
-        session.disconnect();
-      }
+      // "v8" emits the format Chrome DevTools loads; the default is Bun's own.
+      return await record("heap", Bun.generateHeapSnapshot("v8"));
     },
 
     async listSnapshots() {

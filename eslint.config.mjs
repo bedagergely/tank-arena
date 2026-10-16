@@ -25,6 +25,7 @@ export default defineConfig(
   },
   {
     files: ["apps/server/**/*.{ts,mjs}"],
-    languageOptions: { globals: globals.node },
+    // The server runs on Bun, so its runtime globals (e.g. `Bun.generateHeapSnapshot`) exist.
+    languageOptions: { globals: { ...globals.node, Bun: "readonly" } },
   },
 );

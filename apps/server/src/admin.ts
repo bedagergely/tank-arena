@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import express, { type Request, type RequestHandler, type Response, type Router } from "express";
 import { createMetrics, type Metrics } from "./metrics.ts";
-import { createInspectorProfiler, ProfilerStateError, type Profiler } from "./profiler.ts";
+import { createProfiler, ProfilerStateError, type Profiler } from "./profiler.ts";
 
 export interface AdminConfig {
   /** Whether the panel is mounted at all. */
@@ -78,8 +78,8 @@ function handle(
 }
 
 /**
- * The profiling panel: start/stop the CPU and heap profilers, capture a heap
- * snapshot, download anything recorded so far, and record live CPU/memory usage.
+ * The profiling panel: start/stop the CPU profiler, capture a heap snapshot,
+ * download anything recorded so far, and record live CPU/memory usage.
  *
  * The page itself is a second client build (apps/client/admin.html) served from
  * `clientDir`; this module only owns the API and its auth. Pass the result
@@ -90,7 +90,7 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
   const { enabled, user, password, snapshotDir } = resolveAdminConfig(options.env);
   if (!enabled) return null;
 
-  const panel = options.profiler ?? createInspectorProfiler(snapshotDir);
+  const panel = options.profiler ?? createProfiler(snapshotDir);
   const metrics = options.metrics ?? createMetrics();
   const router = express.Router();
 
@@ -102,14 +102,14 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
       res
         .status(503)
         .type("text")
-        .send("The admin UI is not built. Run `pnpm build`, or open it from the Vite dev server (http://localhost:3000/admin.html).");
+        .send("The admin UI is not built. Run `bun run build`, or open it from the Vite dev server (http://localhost:3000/admin.html).");
       return;
     }
     res.sendFile(page);
   });
 
   router.get("/status", (_req, res) => {
-    res.json({ cpuRunning: panel.cpuRunning, heapSamplingRunning: panel.heapSamplingRunning });
+    res.json({ cpuRunning: panel.cpuRunning });
   });
 
   // Live CPU/memory recording, sampled by the server so the reading does not
@@ -158,16 +158,6 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
   router.post("/cpu/stop", handle(async () => ({ snapshot: await panel.stopCpuProfile(), cpuRunning: false })));
 
   router.post("/heap/snapshot", handle(async () => ({ snapshot: await panel.takeHeapSnapshot() })));
-
-  router.post("/heap/start", handle(async () => {
-    await panel.startHeapSampling();
-    return { heapSamplingRunning: true };
-  }));
-
-  router.post("/heap/stop", handle(async () => ({
-    snapshot: await panel.stopHeapSampling(),
-    heapSamplingRunning: false,
-  })));
 
   return router;
 }
