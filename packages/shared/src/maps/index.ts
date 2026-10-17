@@ -3,6 +3,7 @@ import { compileMap, type GameMap, type MapSource } from "./types.ts";
 
 export * from "./types.ts";
 export * from "./layout.ts";
+export * from "./wallIndex.ts";
 
 const SOURCES: ReadonlyMap<string, MapSource> = new Map(MAP_SOURCES.map((s) => [s.id, s]));
 const REGISTRY: ReadonlyMap<string, GameMap> = new Map(MAP_SOURCES.map((s) => [s.id, compileMap(s)]));

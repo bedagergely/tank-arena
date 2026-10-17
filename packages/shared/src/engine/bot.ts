@@ -1,4 +1,5 @@
 import type { GameMap, Rect } from "../maps/types.ts";
+import { nextWallStamp, wallCell } from "../maps/wallIndex.ts";
 import { PERK_BULLET_SPEED, PERK_TANK_SPEED, type GameRules } from "../rules.ts";
 import { circleHitsWall, circlesOverlap, moveCircle } from "./physics.ts";
 import { countBullets, maxBullets } from "./simulation.ts";
@@ -216,7 +217,7 @@ function decide(bot: BotState, myTank: Tank, world: Readonly<World>, map: GameMa
 // Shooting
 
 /** Where a bullet leg meets a surface, and which velocity components reflect off it. */
-interface ShotImpact {
+export interface ShotImpact {
   time: number;
   reflectX: boolean;
   reflectY: boolean;
@@ -259,15 +260,9 @@ export function simulateShot(
   // simulator pins it there until it expires, so the shot reaches nothing.
   if (circleHitsWall(map, x, y, bulletRadius)) return undefined;
 
-  // The map border behaves like a wall for the bullet centre.
-  const borderMinX = bulletRadius;
-  const borderMinY = bulletRadius;
-  const borderMaxX = map.width - bulletRadius;
-  const borderMaxY = map.height - bulletRadius;
-
   let remaining = SHOT_MAX_SECONDS;
   while (remaining > 0) {
-    const wall = castShotRay(map.walls, bulletRadius, x, y, vx, vy, remaining, borderMinX, borderMinY, borderMaxX, borderMaxY);
+    const wall = castShotRay(map, bulletRadius, x, y, vx, vy, remaining);
     const legTime = wall ? wall.time : remaining;
     const hit = firstShotHit(world.tanks, x, y, vx, vy, legTime, bulletRadius, tankRadius, shooter.slot, canHitOwner, bounces);
     if (hit) return { slot: hit.slot, bounces, time: time + hit.time };
@@ -293,22 +288,23 @@ export function simulateShot(
 
 /**
  * Earliest wall the leg from (x, y) along (vx, vy) meets within `maxTime`
- * seconds, testing only the walls whose grown bounding box overlaps the leg's
- * bounding box. Ties merge into a single impact that reflects every component
- * involved.
+ * seconds. The map border behaves like a wall for the bullet centre.
+ *
+ * The walls are reached through the map's index rather than by scanning them
+ * all: the buckets are grown by the query margin, so a wall the bullet radius
+ * can touch is always bucketed in one of the cells the leg itself crosses. The
+ * leg is walked cell by cell, each wall tested at most once per query, and a
+ * radius wider than the margin falls back to the linear scan. Ties merge into a
+ * single impact that reflects every component involved.
  */
-function castShotRay(
-  walls: readonly Rect[],
+export function castShotRay(
+  map: GameMap,
   bulletRadius: number,
   x: number,
   y: number,
   vx: number,
   vy: number,
   maxTime: number,
-  minX: number,
-  minY: number,
-  maxX: number,
-  maxY: number,
 ): ShotImpact | undefined {
   let best: ShotImpact | undefined;
   const consider = (time: number, reflectX: boolean, reflectY: boolean): void => {
@@ -322,19 +318,67 @@ function castShotRay(
   };
 
   // The border planes, hit only while heading out of the map.
+  const minX = bulletRadius;
+  const minY = bulletRadius;
+  const maxX = map.width - bulletRadius;
+  const maxY = map.height - bulletRadius;
   if (vx < 0) consider((minX - x) / vx, true, false);
   else if (vx > 0) consider((maxX - x) / vx, true, false);
   if (vy < 0) consider((minY - y) / vy, false, true);
   else if (vy > 0) consider((maxY - y) / vy, false, true);
 
-  const legMinX = Math.min(x, x + vx * maxTime);
-  const legMaxX = Math.max(x, x + vx * maxTime);
-  const legMinY = Math.min(y, y + vy * maxTime);
-  const legMaxY = Math.max(y, y + vy * maxTime);
-  for (const wall of walls) {
-    if (wall.x + wall.width + bulletRadius < legMinX || wall.x - bulletRadius > legMaxX || wall.y + wall.height + bulletRadius < legMinY || wall.y - bulletRadius > legMaxY) continue;
-    const hit = rayShotBox(wall, bulletRadius, x, y, vx, vy);
-    if (hit) consider(hit.time, hit.reflectX, hit.reflectY);
+  const index = map.wallIndex;
+  if (bulletRadius > index.margin) {
+    for (const wall of map.walls) {
+      const hit = rayShotBox(wall, bulletRadius, x, y, vx, vy);
+      if (hit) consider(hit.time, hit.reflectX, hit.reflectY);
+    }
+    return best;
+  }
+
+  const cell = index.cell;
+  let col = wallCell(x, index.cols, cell);
+  let row = wallCell(y, index.rows, cell);
+  const stepX = vx > 0 ? 1 : vx < 0 ? -1 : 0;
+  const stepY = vy > 0 ? 1 : vy < 0 ? -1 : 0;
+  let tMaxX = vx === 0 ? Infinity : ((vx > 0 ? (col + 1) * cell : col * cell) - x) / vx;
+  let tMaxY = vy === 0 ? Infinity : ((vy > 0 ? (row + 1) * cell : row * cell) - y) / vy;
+  const tDeltaX = vx === 0 ? Infinity : Math.abs(cell / vx);
+  const tDeltaY = vy === 0 ? Infinity : Math.abs(cell / vy);
+  const stamps = index.stamps;
+  const stamp = nextWallStamp(index);
+
+  for (;;) {
+    const bucket = row * index.cols + col;
+    const end = index.starts[bucket + 1]!;
+    for (let i = index.starts[bucket]!; i < end; i++) {
+      const wall = index.items[i]!;
+      if (stamps[wall] === stamp) continue;
+      stamps[wall] = stamp;
+      const hit = rayShotBox(map.walls[wall]!, bulletRadius, x, y, vx, vy);
+      if (hit) consider(hit.time, hit.reflectX, hit.reflectY);
+    }
+    // A step that would leave the grid pins that axis to its edge instead of
+    // ending the walk: a leg starting on a cell boundary, or one that leaves the
+    // map, still meets every wall its radius can reach from the edge cells.
+    if (tMaxX <= tMaxY) {
+      if (tMaxX > maxTime) break;
+      const next = col + stepX;
+      if (next < 0 || next >= index.cols) tMaxX = Infinity;
+      else {
+        col = next;
+        tMaxX += tDeltaX;
+      }
+    } else {
+      if (tMaxY > maxTime) break;
+      const next = row + stepY;
+      if (next < 0 || next >= index.rows) tMaxY = Infinity;
+      else {
+        row = next;
+        tMaxY += tDeltaY;
+      }
+    }
+    if (tMaxX === Infinity && tMaxY === Infinity) break;
   }
   return best;
 }
