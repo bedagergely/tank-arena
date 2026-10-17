@@ -1,6 +1,7 @@
 [install]
-# Supply-chain guard: only resolve package versions published at least 7 days ago.
-minimumReleaseAge = 10080
+# Supply-chain guard: only resolve package versions published at least 7 days ago
+# (604800 seconds). Bun reads the value in seconds, not minutes.
+minimumReleaseAge = 604800
 
 # Bun's frontend dev server reads plugins from the bunfig.toml in the working
 # directory (it does not search upwards), so this file exists alongside the

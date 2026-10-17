@@ -25,8 +25,8 @@ bun install
 bun run dev      # server on :2567, client on :3000
 ```
 
-Use **Bun only** — never npm, yarn or pnpm. `bunfig.toml` pins `minimumReleaseAge: 10080`
-(resolve only package versions published 7+ days ago) and the root `package.json`
+Use **Bun only** — never npm, yarn or pnpm. `bunfig.toml` pins `minimumReleaseAge: 604800`
+(seconds; resolve only package versions published 7+ days ago) and the root `package.json`
 `trustedDependencies` list is the allowlist of packages that may run install scripts. Do not weaken
 these supply-chain guards; if a dependency fails to install, escalate instead of loosening them.
 
