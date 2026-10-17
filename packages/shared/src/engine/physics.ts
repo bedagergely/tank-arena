@@ -1,4 +1,5 @@
 import type { GameMap } from "../maps/types.ts";
+import { wallCell } from "../maps/wallIndex.ts";
 
 /** True when a circle at (x, y) with radius r overlaps any wall or leaves the map. */
 export function circleHitsWall(map: GameMap, x: number, y: number, r: number): boolean {
@@ -6,13 +7,26 @@ export function circleHitsWall(map: GameMap, x: number, y: number, r: number): b
 
   const rr = r * r;
   const walls = map.walls;
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i]!;
-    const cx = clamp(x, w.x, w.x + w.width);
-    const cy = clamp(y, w.y, w.y + w.height);
-    const dx = x - cx;
-    const dy = y - cy;
-    if (dx * dx + dy * dy < rr) return true;
+  const index = map.wallIndex;
+  // Only the cells the circle's own box touches can hold a wall it overlaps.
+  const minCol = wallCell(x - r, index.cols, index.cell);
+  const maxCol = wallCell(x + r, index.cols, index.cell);
+  const minRow = wallCell(y - r, index.rows, index.cell);
+  const maxRow = wallCell(y + r, index.rows, index.cell);
+  for (let row = minRow; row <= maxRow; row++) {
+    const base = row * index.cols;
+    for (let col = minCol; col <= maxCol; col++) {
+      const bucket = base + col;
+      const end = index.starts[bucket + 1]!;
+      for (let i = index.starts[bucket]!; i < end; i++) {
+        const w = walls[index.items[i]!]!;
+        const cx = clamp(x, w.x, w.x + w.width);
+        const cy = clamp(y, w.y, w.y + w.height);
+        const dx = x - cx;
+        const dy = y - cy;
+        if (dx * dx + dy * dy < rr) return true;
+      }
+    }
   }
   return false;
 }

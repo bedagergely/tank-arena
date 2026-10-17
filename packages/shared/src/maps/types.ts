@@ -1,4 +1,5 @@
 import { isBorderClosed, layoutWalls, parseLayout, tileCenter, unreachableCells } from "./layout.ts";
+import { buildWallIndex, type WallIndex } from "./wallIndex.ts";
 
 /** Axis-aligned rectangle in world units (pixels). */
 export interface Rect {
@@ -52,6 +53,8 @@ export interface GameMap {
   cols: number;
   rows: number;
   walls: readonly Rect[];
+  /** Uniform grid over `walls`, so a lookup does not scan the whole list. */
+  wallIndex: WallIndex;
   spawns: readonly SpawnPoint[];
 }
 
@@ -99,6 +102,7 @@ export function compileMap(source: MapSource): GameMap {
   const t = source.wallThickness;
   const width = grid.cols * ts + t;
   const height = grid.rows * ts + t;
+  const walls = layoutWalls(grid, ts, t);
   return {
     id: source.id,
     name: source.name,
@@ -108,7 +112,8 @@ export function compileMap(source: MapSource): GameMap {
     wallThickness: t,
     cols: grid.cols,
     rows: grid.rows,
-    walls: layoutWalls(grid, ts, t),
+    walls,
+    wallIndex: buildWallIndex(walls, width, height),
     spawns: grid.spawns.map((s) => {
       const { x, y } = tileCenter(ts, t, s.col, s.row);
       return { x, y, angle: Math.atan2(height / 2 - y, width / 2 - x) };
