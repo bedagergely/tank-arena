@@ -1,16 +1,16 @@
 # Deploying to a VPS
 
-The production build is a single Node process: the Colyseus server also serves the
+The production build is a single Bun process: the Colyseus server also serves the
 built client from `apps/client/dist`, so one port (2567) hosts everything and the
 client connects to the same origin it was loaded from. `docker-compose.yml` runs
 that process behind Nginx on plain HTTP; `docker-compose.tls.yml` optionally adds
 HTTPS with a Let's Encrypt certificate kept fresh by a certbot sidecar.
 
 ```
-browser ──80──> nginx ──2567──> game (node)
+browser ──80──> nginx ──2567──> game (bun)
 
 with docker-compose.tls.yml:
-browser ──443──> nginx ──2567──> game (node)
+browser ──443──> nginx ──2567──> game (bun)
                   │
                  certbot (renews every 12h; nginx reloads every 6h)
 ```
@@ -107,7 +107,7 @@ for a reference.
 | `ADMIN_USER`      | `game` environment   | Basic-auth user for `/admin` (default `admin`)                |
 | `ADMIN_PASSWORD`  | `game` environment   | Enables `/admin` behind basic auth; unset keeps it disabled   |
 | `ADMIN_SNAPSHOT_DIR` | `game` environment | Where `/admin` writes profiles (default: temp dir)          |
-| `VITE_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
+| `PUBLIC_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
 
 ## Monitoring panel
 
@@ -133,13 +133,15 @@ not mounted at all, so a production deploy can never expose it unprotected.
 
 ## Profiling panel
 
-`/admin` is a small page that records CPU profiles, heap snapshots and sampling heap
-profiles with Node's built-in inspector, then lists them for download. The page is a
-second client build (`apps/client/admin.html`, alongside the game), so `pnpm build`
+`/admin` is a small page that records CPU profiles and heap snapshots, then lists
+them for download. CPU profiles come from the inspector; heap snapshots come from
+`Bun.generateHeapSnapshot` (Bun's inspector does not implement the `HeapProfiler`
+domain, so sampling heap profiles are not available). The page is a
+second client build (`apps/client/admin.html`, alongside the game), so `bun run build`
 produces it and the server serves it from `apps/client/dist`; the server itself only
 owns the API behind it.
 
-In development the client is not built, so open the page on the Vite dev server at
+In development the client is not built, so open the page on the Bun dev server at
 `http://localhost:3000/admin.html` — it proxies the API to the game server.
 
 In production the panel is only mounted when `ADMIN_PASSWORD` is set, and is then
@@ -160,11 +162,11 @@ Then open `http://<host>/admin`, sign in, and use the two halves of the page.
 **Live metrics** — the CPU card's **Start/Stop recording** samples the process CPU time
 (`process.cpuUsage()`, shown as a percentage of one core, so a multi-threaded burst can
 read above 100%), and the memory card does the same for `process.memoryUsage()`. The
-memory bar splits RSS the way Node accounts for it: the V8 heap (used and reserved),
-external C++ allocations (Buffers and friends) and everything else — code, stacks and
-native allocations. Both cards keep the last minute as a sparkline. The server samples
-once a second while a card is recording, so the reading does not depend on how often the
-page happens to poll; stopping the card stops the timer.
+memory bar splits RSS the way the runtime accounts for it: the JS heap (used and
+reserved), external allocations (Buffers and friends) and everything else — code,
+stacks and native allocations. Both cards keep the last minute as a sparkline. The
+server samples once a second while a card is recording, so the reading does not
+depend on how often the page happens to poll; stopping the card stops the timer.
 
 **Snapshots** —
 
@@ -173,17 +175,15 @@ page happens to poll; stopping the card stops the timer.
   `build/index.js.map` the server build emits, since DevTools cannot attach a source
   map to an imported profile itself. If the map is missing the raw bundle positions
   are kept.
-- **Start/Stop heap sampling** writes a `.heapprofile` (DevTools Memory tab, "Load").
 - **Take heap snapshot** writes a `.heapsnapshot` (DevTools Memory tab).
 
 Every row also has an **Inspect** button that reads the profile in the page and shows its
 headline numbers plus the biggest consumers — self time per function for a CPU profile,
-shallow size per node name and per node type for a heap snapshot, and bytes allocated per
-function for a sampling profile. V8's `(idle)`, `(program)` and `(garbage collector)`
-frames are not functions, so a CPU profile reports them as Idle/VM/GC percentages instead
-of burying the real functions underneath them. Parsing happens in your browser, so the
-game process is never blocked; anything over 100 MB is refused with a pointer to DevTools
-instead, which streams them.
+and shallow size per node name and per node type for a heap snapshot. V8's `(idle)`,
+`(program)` and `(garbage collector)` frames are not functions, so a CPU profile reports
+them as Idle/VM/GC percentages instead of burying the real functions underneath them.
+Parsing happens in your browser, so the game process is never blocked; anything over
+100 MB is refused with a pointer to DevTools instead, which streams them.
 
 A `.cpuprofile` records time but never how often a function ran, so there is no per-call
 average: V8 only exposes call counts through its precise coverage, which instruments every

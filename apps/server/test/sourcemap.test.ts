@@ -2,10 +2,14 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { build } from "esbuild";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { remapProfile, type CpuProfile } from "../src/sourcemap.ts";
+
+/** Bun's bundler; declared locally for the same reason as in src/profiler.ts. */
+declare const Bun: {
+  build(options: Record<string, unknown>): Promise<{ success: boolean; logs: { message: string }[] }>;
+};
 
 const SOURCE = ["export function marker() {", "  return 42;", "}", ""].join("\n");
 
@@ -21,17 +25,14 @@ async function bundle(): Promise<{ dir: string; entry: string; js: string }> {
   dirs.push(dir);
   const entry = join(dir, "entry.ts");
   await writeFile(entry, SOURCE);
-  const js = join(dir, "bundle.js");
-  await build({
-    entryPoints: [entry],
-    outfile: js,
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    sourcemap: true,
-    logLevel: "silent",
+  const result = await Bun.build({
+    entrypoints: [entry],
+    outdir: dir,
+    target: "bun",
+    sourcemap: "external",
   });
-  return { dir, entry, js };
+  if (!result.success) throw new Error(result.logs.map((log) => log.message).join("\n"));
+  return { dir, entry, js: join(dir, "entry.js") };
 }
 
 /** A one-node profile whose only frame sits on `marker` in the emitted bundle. */

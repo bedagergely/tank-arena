@@ -13,11 +13,9 @@ import {
   snapshotUrl,
   startCpuProfile,
   startCpuRecording,
-  startHeapSampling,
   startMemoryRecording,
   stopCpuProfile,
   stopCpuRecording,
-  stopHeapSampling,
   stopMemoryRecording,
   takeHeapSnapshot,
   type AdminStatus,
@@ -26,10 +24,9 @@ import {
 const KIND_LABELS: Record<SnapshotInfo["kind"], string> = {
   cpu: "CPU profile",
   heap: "Heap snapshot",
-  heapsampling: "Heap sampling profile",
 };
 
-const IDLE: AdminStatus = { cpuRunning: false, heapSamplingRunning: false };
+const IDLE: AdminStatus = { cpuRunning: false };
 const POLL_MS = 1000;
 
 /**
@@ -201,13 +198,6 @@ export function AdminPanel() {
             onClick={() => toggle(status.cpuRunning, startCpuProfile, stopCpuProfile, "CPU profiling")}
           >
             {status.cpuRunning ? "Stop CPU profiling" : "Start CPU profiling"}
-          </button>
-          <button
-            className={`${BTN} ${status.heapSamplingRunning ? BTN_PRIMARY : BTN_DEFAULT}`}
-            disabled={busy !== null}
-            onClick={() => toggle(status.heapSamplingRunning, startHeapSampling, stopHeapSampling, "heap sampling")}
-          >
-            {status.heapSamplingRunning ? "Stop heap sampling" : "Start heap sampling"}
           </button>
           <button
             className={`${BTN} ${BTN_DEFAULT}`}

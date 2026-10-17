@@ -5,7 +5,7 @@ import "./styles.css";
 
 // Dev-only tooling behind a query flag; tree-shaken out of production builds.
 const MapEditor =
-  import.meta.env.DEV && new URLSearchParams(window.location.search).has("editor")
+  process.env.NODE_ENV !== "production" && new URLSearchParams(window.location.search).has("editor")
     ? lazy(() => import("./dev/MapEditor.tsx").then((m) => ({ default: m.MapEditor })))
     : null;
 

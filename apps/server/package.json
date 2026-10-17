@@ -7,19 +7,20 @@
   "main": "build/index.js",
   "files": ["build"],
   "engines": {
-    "node": ">=22"
+    "bun": ">=1.4"
   },
   "exports": {
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "node build/index.js",
-    "build": "node build.mjs",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun build/index.js",
+    "build": "bun build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@colyseus/bun-websockets": "0.18.2",
     "@colyseus/schema": "^5.0.20",
     "@colyseus/tools": "^0.18.2",
     "@jridgewell/trace-mapping": "^0.3.31",
@@ -32,8 +33,6 @@
     "@colyseus/testing": "^0.18.4",
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.0",
-    "esbuild": "^0.28.0",
-    "tsx": "^4.20.0",
     "typescript": "^5.9.0",
     "vitest": "^4.0.0"
   }

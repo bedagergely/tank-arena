@@ -3,13 +3,12 @@ import type { SnapshotInfo } from "@tank-arena/server/profiler";
 
 export interface AdminStatus {
   cpuRunning: boolean;
-  heapSamplingRunning: boolean;
 }
 
 /**
  * The profiling panel API. The game server mounts it under `/admin`, behind the
- * same HTTP basic auth as the page itself; in development Vite proxies that path
- * (see vite.config.ts) so the page runs on a single origin either way.
+ * same HTTP basic auth as the page itself; in development the client dev server
+ * proxies that path (see dev/serve.ts) so the page runs on a single origin either way.
  */
 const BASE = "/admin";
 
@@ -28,8 +27,6 @@ export const startCpuProfile = () => request("/cpu/start", "POST");
 export const stopCpuProfile = () => request<{ snapshot: SnapshotInfo }>("/cpu/stop", "POST");
 
 export const takeHeapSnapshot = () => request<{ snapshot: SnapshotInfo }>("/heap/snapshot", "POST");
-export const startHeapSampling = () => request("/heap/start", "POST");
-export const stopHeapSampling = () => request<{ snapshot: SnapshotInfo }>("/heap/stop", "POST");
 
 export const snapshotUrl = (name: string) => `${BASE}/snapshots/${encodeURIComponent(name)}`;
 

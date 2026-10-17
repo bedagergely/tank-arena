@@ -7,7 +7,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { adminMiddleware, resolveAdminConfig, type AdminOptions } from "../src/admin.ts";
 import type { CpuSample, MemorySample, Metrics } from "../src/metrics.ts";
-import { createInspectorProfiler, type Profiler, type SnapshotInfo } from "../src/profiler.ts";
+import { createProfiler, type Profiler, type SnapshotInfo } from "../src/profiler.ts";
 
 const basic = (credentials: string) => `Basic ${Buffer.from(credentials).toString("base64")}`;
 
@@ -23,13 +23,9 @@ const sample: SnapshotInfo = {
 
 function fakeProfiler(): Profiler {
   let cpu = false;
-  let heap = false;
   return {
     get cpuRunning() {
       return cpu;
-    },
-    get heapSamplingRunning() {
-      return heap;
     },
     async startCpuProfile() {
       cpu = true;
@@ -39,13 +35,6 @@ function fakeProfiler(): Profiler {
       return sample;
     },
     async takeHeapSnapshot() {
-      return sample;
-    },
-    async startHeapSampling() {
-      heap = true;
-    },
-    async stopHeapSampling() {
-      heap = false;
       return sample;
     },
     async listSnapshots() {
@@ -214,24 +203,18 @@ describe("admin panel", () => {
     expect(await start.json()).toEqual({ cpuRunning: true });
 
     const status = await fetch(`${base}/admin/status`, { headers: auth });
-    expect(await status.json()).toEqual({ cpuRunning: true, heapSamplingRunning: false });
+    expect(await status.json()).toEqual({ cpuRunning: true });
 
     const stop = await fetch(`${base}/admin/cpu/stop`, { method: "POST", headers: auth });
     expect(stop.status).toBe(200);
     expect(await stop.json()).toEqual({ snapshot: sample, cpuRunning: false });
   });
 
-  it("drives the heap profilers", async () => {
+  it("takes a heap snapshot", async () => {
     const base = await listen({ env: PROD, profiler: fakeProfiler() });
 
     const snapshot = await fetch(`${base}/admin/heap/snapshot`, { method: "POST", headers: auth });
     expect(await snapshot.json()).toEqual({ snapshot: sample });
-
-    const start = await fetch(`${base}/admin/heap/start`, { method: "POST", headers: auth });
-    expect(await start.json()).toEqual({ heapSamplingRunning: true });
-
-    const stop = await fetch(`${base}/admin/heap/stop`, { method: "POST", headers: auth });
-    expect(await stop.json()).toEqual({ snapshot: sample, heapSamplingRunning: false });
   });
 
   it("lists recorded snapshots", async () => {
@@ -305,7 +288,7 @@ describe("admin panel downloads", () => {
     const app = express();
     const panel = adminMiddleware({
       env: { ...PROD, ADMIN_SNAPSHOT_DIR: dir },
-      profiler: createInspectorProfiler(dir),
+      profiler: createProfiler(dir),
     });
     if (panel) app.use("/admin", panel);
 
@@ -324,7 +307,7 @@ describe("admin panel downloads", () => {
   });
 });
 
-describe("inspector profiler", () => {
+describe("profiler", () => {
   const dirs: string[] = [];
 
   afterAll(async () => {
@@ -334,7 +317,7 @@ describe("inspector profiler", () => {
   async function profiler() {
     const dir = await mkdtemp(join(tmpdir(), "tank-profiler-"));
     dirs.push(dir);
-    return { dir, panel: createInspectorProfiler(dir) };
+    return { dir, panel: createProfiler(dir) };
   }
 
   it("records a CPU profile", async () => {
@@ -364,19 +347,6 @@ describe("inspector profiler", () => {
     expect(info.name).toMatch(/^heap-.*\.heapsnapshot$/);
     const snapshot = JSON.parse(await readFile(join(dir, info.name), "utf8"));
     expect(snapshot.snapshot.meta.node_fields).toBeDefined();
-  });
-
-  it("records a sampling heap profile", async () => {
-    const { dir, panel } = await profiler();
-    expect(panel.heapSamplingRunning).toBe(false);
-    await panel.startHeapSampling();
-    expect(panel.heapSamplingRunning).toBe(true);
-    const info = await panel.stopHeapSampling();
-    expect(panel.heapSamplingRunning).toBe(false);
-
-    expect(info.kind).toBe("heapsampling");
-    expect(info.name).toMatch(/^heapsampling-.*\.heapprofile$/);
-    expect(JSON.parse(await readFile(join(dir, info.name), "utf8"))).toHaveProperty("head");
   });
 
   it("lists snapshots newest first and only exposes names it recorded", async () => {

@@ -44,7 +44,7 @@ function toFileUrl(source: string, mapDir: string): string {
 /**
  * Rewrite a V8 CPU profile so its frames point at the original sources.
  *
- * Production runs the esbuild bundle, so every frame from our code reports
+ * Production runs the bundled server, so every frame from our code reports
  * `build/index.js` and bundle line numbers, which DevTools cannot resolve back
  * (it only applies source maps to traces it recorded itself). The build ships a
  * `.map` beside the bundle, so frames whose script has one are mapped to the

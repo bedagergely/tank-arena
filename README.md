@@ -1,7 +1,7 @@
 # Tank Arena
 
 Multiplayer browser tank game. Authoritative [Colyseus](https://colyseus.io) server,
-[PixiJS](https://pixijs.com) + [React](https://react.dev) client, in one pnpm monorepo.
+[PixiJS](https://pixijs.com) + [React](https://react.dev) client, in one Bun monorepo.
 
 Two tanks drop into opposite corners of a walled arena. Each can have one bullet in
 flight; bullets bounce off walls and vanish after 5 bounces. First tank hit ends the
@@ -14,17 +14,17 @@ bullets, faster tank, or a shield that absorbs one hit. Each room has an ephemer
 
 ```
 packages/shared   Engine-agnostic game core: rules, maps, fixed-step simulation, wire contracts
-apps/server       Colyseus 0.18 server (Node >= 22). Owns all game truth.
-apps/client       Vite + React UI, PixiJS renderer. Sends intents only, never simulates.
+apps/server       Colyseus 0.18 server (Bun >= 1.4). Owns all game truth.
+apps/client       Bun + React UI, PixiJS renderer. Sends intents only, never simulates.
 ```
 
 ## Getting started
 
-Requires Node 22+ and pnpm 10+ (`corepack enable` gives you the pinned pnpm).
+Requires [Bun](https://bun.sh) 1.4+ (the pinned version is in `packageManager`).
 
 ```sh
-pnpm install
-pnpm dev            # server on :2567, client on :3000
+bun install
+bun run dev         # server on :2567, client on :3000
 ```
 
 Open http://localhost:3000 in two tabs, create a room in one and join it from the
@@ -43,34 +43,34 @@ dodge incoming bullets, path around walls and go for loot boxes.
 Other scripts:
 
 ```sh
-pnpm test           # shared engine tests + server room tests (vitest)
-pnpm typecheck
-pnpm lint
-pnpm build          # apps/server/build/index.js, apps/client/dist/
-pnpm --filter @tank-arena/server start
+bun run test        # shared + server tests (vitest), client logic tests (bun test)
+bun run typecheck
+bun run lint
+bun run build       # apps/server/build/index.js, apps/client/dist/
+bun run --filter @tank-arena/server start
 ```
 
 ### Map editor (dev only)
 
-With `pnpm dev` running, open http://localhost:3000/?editor to build maps visually.
+With `bun run dev` running, open http://localhost:3000/?editor to build maps visually.
 Maps are Tank Trouble style: a grid of square tiles (bigger than a tank) with thin walls
 that sit only on tile borders. Click a tile border to toggle a wall (drag to paint),
 `Spawn` tool + click a tile to place numbered spawn points, pick columns / rows / tile
 size / wall thickness, or **Generate maze** for a random labyrinth (seed + loop %). The
 outer border is always closed and every tile must stay reachable. **Save** writes
 `packages/shared/src/maps/data/<id>.ts` and regenerates
-`data/index.ts` through the Vite dev server, so the map lands in source: commit it and
-it is selectable on the home page. The endpoint only exists in `vite` dev mode, never in
-builds.
+`data/index.ts` through the Bun dev server (`apps/client/dev/serve.ts`), so the map lands
+in source: commit it and it is selectable on the home page. The endpoint only exists in
+`bun run dev`, never in builds.
 
 In production the server serves `apps/client/dist` itself and the client connects
 to the origin it was loaded from, so a single port hosts the game. Set
-`VITE_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
+`PUBLIC_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
 the client is hosted elsewhere. The Colyseus monitor is at
 `http://localhost:2567/monitor`. The profiling panel (live CPU/memory gauges, CPU
 profiles, heap snapshots) is a second client build, served at
 `http://localhost:2567/admin` — or
-`http://localhost:3000/admin.html` under `pnpm dev`, which proxies its API. In
+`http://localhost:3000/admin.html` under `bun run dev`, which proxies its API. In
 production both panels are only mounted when `MONITOR_PASSWORD` / `ADMIN_PASSWORD`
 is set, behind basic auth — see [DEPLOY.md](DEPLOY.md).
 

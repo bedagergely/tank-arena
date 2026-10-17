@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { summarize, summarizeCpuProfile, summarizeHeapProfile, summarizeHeapSnapshot } from "../src/admin/summarize.ts";
+import { describe, expect, it } from "bun:test";
+import { summarize, summarizeCpuProfile, summarizeHeapSnapshot } from "../src/admin/summarize.ts";
 
 const CPU_PROFILE = {
   nodes: [
@@ -30,28 +30,6 @@ const HEAP_SNAPSHOT = {
   ],
   edges: [],
   strings: ["Widget", "items"],
-};
-
-const HEAP_PROFILE = {
-  head: {
-    callFrame: { functionName: "(root)", url: "", lineNumber: -1 },
-    selfSize: 0,
-    children: [
-      {
-        callFrame: { functionName: "parse", url: "file:///app/src/parse.ts", lineNumber: 4 },
-        selfSize: 1024,
-        children: [
-          {
-            callFrame: { functionName: "decode", url: "file:///app/src/decode.ts", lineNumber: 9 },
-            selfSize: 2048,
-            children: [],
-          },
-        ],
-      },
-      { callFrame: { functionName: "parse", url: "file:///app/src/parse.ts", lineNumber: 4 }, selfSize: 512, children: [] },
-    ],
-  },
-  samples: [],
 };
 
 describe("summarizeCpuProfile", () => {
@@ -161,57 +139,9 @@ describe("summarizeHeapSnapshot", () => {
   });
 });
 
-describe("summarizeHeapProfile", () => {
-  it("walks the call tree and merges the same function", () => {
-    const summary = summarizeHeapProfile(HEAP_PROFILE);
-
-    expect(summary.stats).toEqual([
-      { label: "Sampled", value: "3.5 KB" },
-      { label: "Functions", value: "2" },
-    ]);
-
-    const rows = summary.sections[0]!.rows;
-    expect(rows[0]).toMatchObject({ name: "decode", value: "2.0 KB" });
-    expect(rows[1]).toMatchObject({ name: "parse", value: "1.5 KB" });
-  });
-
-  it("survives a very deep call tree", () => {
-    let node: Record<string, unknown> = { callFrame: { functionName: "leaf", url: "f.ts", lineNumber: 0 }, selfSize: 64 };
-    for (let i = 0; i < 20_000; i++) {
-      node = { callFrame: { functionName: `f${i}`, url: "f.ts", lineNumber: i }, selfSize: 0, children: [node] };
-    }
-    expect(summarizeHeapProfile({ head: node }).stats[0]!.value).toBe("64 B");
-  });
-
-  it("labels V8's synthetic frames apart from native code", () => {
-    const summary = summarizeHeapProfile({
-      head: {
-        callFrame: { functionName: "(root)", url: "", lineNumber: -1 },
-        selfSize: 512,
-        children: [
-          {
-            callFrame: { functionName: "decode", url: "file:///app/src/decode.ts", lineNumber: 9 },
-            selfSize: 1024,
-            children: [],
-          },
-        ],
-      },
-    });
-
-    const rows = summary.sections[0]!.rows;
-    expect(rows[0]).toMatchObject({ name: "decode", detail: "/app/src/decode.ts:10" });
-    expect(rows[1]).toMatchObject({ name: "(root)", detail: "v8 internal" });
-  });
-
-  it("rejects something that is not a heap sampling profile", () => {
-    expect(() => summarizeHeapProfile({ samples: [] })).toThrow(/heap sampling/);
-  });
-});
-
 describe("summarize", () => {
   it("dispatches on the snapshot kind", () => {
     expect(summarize("cpu", CPU_PROFILE).sections[0]!.title).toBe("Hottest functions");
     expect(summarize("heap", HEAP_SNAPSHOT).sections[0]!.title).toBe("Largest by self size");
-    expect(summarize("heapsampling", HEAP_PROFILE).sections[0]!.title).toBe("Top allocating functions");
   });
 });
