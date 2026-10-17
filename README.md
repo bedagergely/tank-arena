@@ -67,8 +67,8 @@ In production the server serves `apps/client/dist` itself and the client connect
 to the origin it was loaded from, so a single port hosts the game. Set
 `PUBLIC_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
 the client is hosted elsewhere. The Colyseus monitor is at
-`http://localhost:2567/monitor`. The profiling panel (live CPU/memory gauges, CPU
-profiles, heap snapshots) is a second client build, served at
+`http://localhost:2567/monitor`. The profiling panel (live CPU/memory/game gauges,
+CPU profiles, heap snapshots) is a second client build, served at
 `http://localhost:2567/admin` — or
 `http://localhost:3000/admin.html` under `bun run dev`, which proxies its API. In
 production both panels are only mounted when `MONITOR_PASSWORD` / `ADMIN_PASSWORD`

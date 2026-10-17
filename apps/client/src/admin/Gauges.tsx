@@ -1,3 +1,4 @@
+import type { GameEventKind, GameSample } from "@tank-arena/server/gameStats";
 import type { CpuSample, MemorySample } from "@tank-arena/server/metrics";
 import { formatBytes } from "./format.ts";
 
@@ -110,6 +111,42 @@ export function MemoryGauge({ sample, history }: { sample: MemorySample | null; 
         ))}
       </ul>
       <Sparkline values={rssHistory} max={maxRss} className="text-info" />
+    </div>
+  );
+}
+
+const GAME_EVENT_KINDS: readonly GameEventKind[] = ["fire", "bounce", "hit", "loot"];
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="text-base-content/60">{label}</span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </span>
+  );
+}
+
+/** Room/seat counts, tick-duration percentiles and event rates from the game channel. */
+export function GameGauge({ sample, history }: { sample: GameSample | null; history: GameSample[] }) {
+  const maxTick = Math.max(1, ...history.map((s) => s.tickP95));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <Stat label="Rooms" value={sample ? String(sample.rooms) : "—"} />
+        <Stat label="Players" value={sample ? String(sample.players) : "—"} />
+        <Stat label="Tick p50" value={sample ? `${sample.tickP50.toFixed(1)} ms` : "—"} />
+        <Stat label="Tick p95" value={sample ? `${sample.tickP95.toFixed(1)} ms` : "—"} />
+      </div>
+      <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-xs">
+        {GAME_EVENT_KINDS.map((kind) => (
+          <li key={kind} className="flex items-baseline gap-1.5">
+            <span className="text-base-content/60">{kind}</span>
+            <span className="tabular-nums">{sample ? `${sample.eventsPerSecond[kind].toFixed(1)}/s` : "—"}</span>
+          </li>
+        ))}
+      </ul>
+      <Sparkline values={history.map((s) => s.tickP95)} max={maxTick} className="text-primary" />
     </div>
   );
 }

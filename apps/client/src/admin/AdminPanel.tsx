@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import type { MetricsSnapshot } from "@tank-arena/server/metrics";
 import type { SnapshotInfo } from "@tank-arena/server/profiler";
 import { BTN, BTN_DEFAULT, BTN_PRIMARY, BTN_SM, CARD, CARD_BODY } from "../ui/controls.ts";
-import { CpuGauge, MemoryGauge } from "./Gauges.tsx";
+import { CpuGauge, GameGauge, MemoryGauge } from "./Gauges.tsx";
 import { SummaryView, type InspectState } from "./SummaryView.tsx";
 import { formatBytes } from "./format.ts";
 import { summarize } from "./summarize.ts";
@@ -13,9 +13,11 @@ import {
   snapshotUrl,
   startCpuProfile,
   startCpuRecording,
+  startGameRecording,
   startMemoryRecording,
   stopCpuProfile,
   stopCpuRecording,
+  stopGameRecording,
   stopMemoryRecording,
   takeHeapSnapshot,
   type AdminStatus,
@@ -63,6 +65,7 @@ export function AdminPanel() {
 
   const cpuRecording = metrics?.cpu.recording === true;
   const memoryRecording = metrics?.memory.recording === true;
+  const gameRecording = metrics?.game.recording === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -87,12 +90,12 @@ export function AdminPanel() {
   // Only poll while something is being recorded; the server samples on its own
   // clock, so this just picks up the latest reading.
   useEffect(() => {
-    if (!cpuRecording && !memoryRecording) return;
+    if (!cpuRecording && !memoryRecording && !gameRecording) return;
     const id = setInterval(() => {
       void getMetrics().then(setMetrics, () => {});
     }, POLL_MS);
     return () => clearInterval(id);
-  }, [cpuRecording, memoryRecording]);
+  }, [cpuRecording, memoryRecording, gameRecording]);
 
   async function run(label: string, action: () => Promise<unknown>) {
     setBusy(label);
@@ -113,9 +116,10 @@ export function AdminPanel() {
     }
   }
 
-  const record = (what: "CPU" | "memory", running: boolean) =>
+  const record = (what: "CPU" | "memory" | "game", running: boolean) =>
     run(`${running ? "Stopping" : "Starting"} ${what} recording`, () => {
       if (what === "CPU") return running ? stopCpuRecording() : startCpuRecording();
+      if (what === "game") return running ? stopGameRecording() : startGameRecording();
       return running ? stopMemoryRecording() : startMemoryRecording();
     });
 
@@ -185,6 +189,20 @@ export function AdminPanel() {
               </button>
             </div>
             <MemoryGauge sample={metrics?.memory.latest ?? null} history={metrics?.memory.history ?? []} />
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-lg border border-base-300 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold">Game</span>
+              <button
+                className={`${BTN} ${BTN_SM} ${gameRecording ? BTN_PRIMARY : BTN_DEFAULT}`}
+                disabled={busy !== null}
+                onClick={() => record("game", gameRecording)}
+              >
+                {gameRecording ? "Stop recording" : "Start recording"}
+              </button>
+            </div>
+            <GameGauge sample={metrics?.game.latest ?? null} history={metrics?.game.history ?? []} />
           </div>
         </div>
       </section>

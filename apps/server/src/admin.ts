@@ -136,6 +136,16 @@ export function adminMiddleware(options: AdminOptions = {}): Router | null {
     return { recording: false };
   }));
 
+  router.post("/metrics/game/start", handle(async () => {
+    metrics.game.start();
+    return { recording: true };
+  }));
+
+  router.post("/metrics/game/stop", handle(async () => {
+    metrics.game.stop();
+    return { recording: false };
+  }));
+
   router.get("/snapshots", handle(async () => ({ snapshots: await panel.listSnapshots() })));
 
   router.get("/snapshots/:name", (req, res) => {
