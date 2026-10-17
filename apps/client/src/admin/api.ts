@@ -7,8 +7,8 @@ export interface AdminStatus {
 
 /**
  * The profiling panel API. The game server mounts it under `/admin`, behind the
- * same HTTP basic auth as the page itself; in development Vite proxies that path
- * (see vite.config.ts) so the page runs on a single origin either way.
+ * same HTTP basic auth as the page itself; in development the client dev server
+ * proxies that path (see dev/serve.ts) so the page runs on a single origin either way.
  */
 const BASE = "/admin";
 

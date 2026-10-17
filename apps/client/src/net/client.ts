@@ -23,14 +23,25 @@ export type JoinRequest =
 
 export const GAME_ROOM = "game";
 
-/** Dev: Vite on :3000 talks to the server on :2567. Production: the server serves the client, same origin. */
+/** Dev: the client on :3000 talks to the server on :2567. Production: the server serves the client, same origin. */
 function defaultEndpoint(): string {
   const { protocol, host, hostname } = window.location;
   const scheme = protocol === "https:" ? "wss" : "ws";
-  return import.meta.env.DEV ? `${scheme}://${hostname}:2567` : `${scheme}://${host}`;
+  return process.env.NODE_ENV !== "production" ? `${scheme}://${hostname}:2567` : `${scheme}://${host}`;
 }
 
-export const SERVER_URL: string = import.meta.env.VITE_SERVER_URL ?? defaultEndpoint();
+/**
+ * The server URL. `PUBLIC_SERVER_URL` (e.g. `wss://game.example.com`) overrides it
+ * when the client is hosted off the game server; build.ts inlines it at build time.
+ * In development the client always talks to the local server, so the override is a
+ * production-only concern and is not read there.
+ */
+function resolveServerUrl(): string {
+  if (process.env.NODE_ENV !== "production") return defaultEndpoint();
+  return process.env.PUBLIC_SERVER_URL || defaultEndpoint();
+}
+
+export const SERVER_URL: string = resolveServerUrl();
 
 export const sdk = new ColyseusSDK<typeof server>(SERVER_URL);
 

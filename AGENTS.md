@@ -9,7 +9,7 @@ Tank Arena: a multiplayer browser tank game in a Bun monorepo.
 ```
 packages/shared   Engine-agnostic game core: rules, maps, fixed-step simulation, wire contracts. No runtime deps.
 apps/server       Colyseus 0.18 server (Bun >= 1.4). Owns all game truth.
-apps/client       Vite + React UI, PixiJS renderer. Sends intents only, never simulates.
+apps/client       Bun + React UI, PixiJS renderer. Sends intents only, never simulates.
 ```
 
 The server is authoritative: clients send intents (`input`, `chat`, `ready`, `start`, ...), and the
@@ -34,7 +34,7 @@ these supply-chain guards; if a dependency fails to install, escalate instead of
 
 | Command          | What it does                                                        |
 | ---------------- | ------------------------------------------------------------------- |
-| `bun run test`   | Vitest for `packages/shared`, `apps/server` and `apps/client`        |
+| `bun run test`   | Vitest for `packages/shared`/`apps/server`; `bun test` for `apps/client` |
 | `bun run typecheck` | `tsc --noEmit` across all workspaces                             |
 | `bun run lint`   | ESLint over the whole repo                                          |
 | `bun run build`  | `apps/server/build/index.js` and `apps/client/dist/`                |
@@ -49,8 +49,8 @@ them will not merge.
 
 Server test files boot a Colyseus server on `@colyseus/testing`'s fixed port, so they run
 sequentially (`fileParallelism: false` in `apps/server/vitest.config.ts`). Keep it that way.
-The client's `vitest.config.ts` deliberately skips the React/Tailwind plugins — it is for
-pure logic (`src/admin/summarize.ts` and friends), not component tests.
+The client runs its pure-logic tests (`src/admin/summarize.ts` and friends) under `bun test`;
+there are no component tests.
 
 ## Conventions
 
@@ -61,18 +61,24 @@ pure logic (`src/admin/summarize.ts` and friends), not component tests.
   existing comments.
 - Keep game rules, map data, and simulation in `packages/shared`; keep all authority and validation
   on the server. The client only renders and sends intents.
-- The client builds two pages from one Vite config: the game (`index.html`) and the ops-only
-  profiling panel (`admin.html`, `src/admin/`). All UI lives in `apps/client`; `apps/server/src/admin.ts`
-  owns that panel's API and basic auth, and serves the built page. In dev the panel runs on the Vite
-  server at `/admin.html` and proxies `/admin/` to the game server.
+- The client builds two pages from one Bun build (`apps/client/build.ts`): the game
+  (`index.html`) and the ops-only profiling panel (`admin.html`, `src/admin/`). All UI lives in
+  `apps/client`; `apps/server/src/admin.ts` owns that panel's API and basic auth, and serves the
+  built page. In dev the panel runs on the Bun dev server (`apps/client/dev/serve.ts`) at
+  `/admin.html` and proxies `/admin/` to the game server.
+- The client uses Bun's own bundler and dev server — no Vite. `apps/client/bunfig.toml` wires up
+  `bun-plugin-tailwind` for `[serve.static]` (Bun reads `bunfig.toml` from the working directory,
+  not upwards, so it must live beside the client). Cross-origin builds read `PUBLIC_SERVER_URL`
+  (inlined by `build.ts`); `process.env.NODE_ENV`/`PUBLIC_SERVER_URL` are the client's only env
+  reads, and only literal `process.env.FOO` references are replaced.
 - The server runs on Bun (the image ships no Node), so run tooling through Bun and force the
   runtime with `bun --bun run <script>` when a package.json script shells out to a Node CLI.
   Bun's `node:inspector` implements the CPU `Profiler` domain but not `HeapProfiler`: CPU profiles
   go through the inspector and heap snapshots through `Bun.generateHeapSnapshot("v8")`
   (`apps/server/src/profiler.ts`). Sampling heap profiles have no Bun equivalent.
 - New maps are `MapSource` modules in `packages/shared/src/maps/data/` with the generated
-  `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Vite dev
-  server only — commit the generated files.
+  `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Bun dev
+  server only (`apps/client/dev/serve.ts`) — commit the generated files.
 - Never commit secrets. `.env` is gitignored; `.env.example` documents the variables.
 - `.env` is only read by the *server process* via `@colyseus/tools` (and by `docker compose` for
   `${VAR}` substitution) — Docker does not inject it into the container. Any env-gated server

@@ -5,10 +5,9 @@
   "description": "Browser client: React UI + PixiJS renderer",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
+    "dev": "bun dev/serve.ts",
+    "build": "bun build.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,14 +20,12 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
     "@tank-arena/server": "workspace:*",
+    "@types/bun": "1.4.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "bun-plugin-tailwind": "^0.1.2",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.0",
-    "vite": "^7.1.0",
-    "vitest": "^4.0.0"
+    "typescript": "^5.9.0"
   }
 }

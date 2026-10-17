@@ -15,7 +15,7 @@ bullets, faster tank, or a shield that absorbs one hit. Each room has an ephemer
 ```
 packages/shared   Engine-agnostic game core: rules, maps, fixed-step simulation, wire contracts
 apps/server       Colyseus 0.18 server (Bun >= 1.4). Owns all game truth.
-apps/client       Vite + React UI, PixiJS renderer. Sends intents only, never simulates.
+apps/client       Bun + React UI, PixiJS renderer. Sends intents only, never simulates.
 ```
 
 ## Getting started
@@ -43,7 +43,7 @@ dodge incoming bullets, path around walls and go for loot boxes.
 Other scripts:
 
 ```sh
-bun run test        # shared engine tests + server room tests (vitest)
+bun run test        # shared + server tests (vitest), client logic tests (bun test)
 bun run typecheck
 bun run lint
 bun run build       # apps/server/build/index.js, apps/client/dist/
@@ -59,13 +59,13 @@ that sit only on tile borders. Click a tile border to toggle a wall (drag to pai
 size / wall thickness, or **Generate maze** for a random labyrinth (seed + loop %). The
 outer border is always closed and every tile must stay reachable. **Save** writes
 `packages/shared/src/maps/data/<id>.ts` and regenerates
-`data/index.ts` through the Vite dev server, so the map lands in source: commit it and
-it is selectable on the home page. The endpoint only exists in `vite` dev mode, never in
-builds.
+`data/index.ts` through the Bun dev server (`apps/client/dev/serve.ts`), so the map lands
+in source: commit it and it is selectable on the home page. The endpoint only exists in
+`bun run dev`, never in builds.
 
 In production the server serves `apps/client/dist` itself and the client connects
 to the origin it was loaded from, so a single port hosts the game. Set
-`VITE_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
+`PUBLIC_SERVER_URL` (e.g. `wss://game.example.com`) at client build time only when
 the client is hosted elsewhere. The Colyseus monitor is at
 `http://localhost:2567/monitor`. The profiling panel (live CPU/memory gauges, CPU
 profiles, heap snapshots) is a second client build, served at

@@ -107,7 +107,7 @@ for a reference.
 | `ADMIN_USER`      | `game` environment   | Basic-auth user for `/admin` (default `admin`)                |
 | `ADMIN_PASSWORD`  | `game` environment   | Enables `/admin` behind basic auth; unset keeps it disabled   |
 | `ADMIN_SNAPSHOT_DIR` | `game` environment | Where `/admin` writes profiles (default: temp dir)          |
-| `VITE_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
+| `PUBLIC_SERVER_URL` | client build time    | Only needed if the client is hosted on a different origin     |
 
 ## Monitoring panel
 
@@ -141,7 +141,7 @@ second client build (`apps/client/admin.html`, alongside the game), so `bun run 
 produces it and the server serves it from `apps/client/dist`; the server itself only
 owns the API behind it.
 
-In development the client is not built, so open the page on the Vite dev server at
+In development the client is not built, so open the page on the Bun dev server at
 `http://localhost:3000/admin.html` — it proxies the API to the game server.
 
 In production the panel is only mounted when `ADMIN_PASSWORD` is set, and is then

@@ -1,0 +1,10 @@
+[install]
+# Supply-chain guard: only resolve package versions published at least 7 days ago.
+minimumReleaseAge = 10080
+
+# Bun's frontend dev server reads plugins from the bunfig.toml in the working
+# directory (it does not search upwards), so this file exists alongside the
+# Vite-free client dev server. `bun-plugin-tailwind` compiles `@import "tailwindcss"`
+# in src/styles.css for both `bun dev/serve.ts` and build.ts.
+[serve.static]
+plugins = ["bun-plugin-tailwind"]
