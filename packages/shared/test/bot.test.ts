@@ -6,8 +6,10 @@ import {
   DEFAULT_RULES,
   findShot,
   findThreat,
+  listMaps,
   resetBot,
   sanitizeInput,
+  shotCandidates,
   simulateShot,
   thinkBot,
   type BotDifficulty,
@@ -245,5 +247,34 @@ describe("simulateShot", () => {
       hit = engine.step(dt).find((e) => e.type === "hit");
     }
     expect(hit).toMatchObject({ type: "hit", targetSlot: 1 });
+  });
+});
+
+describe("shot candidates", () => {
+  it("drops wall faces the unfolded line cannot cross", () => {
+    for (const map of listMaps()) {
+      const engine = createJsEngine(map, rules);
+      engine.reset([0, 1], 1);
+      const [me, target] = engine.world.tanks;
+      const candidates = shotCandidates(me!, target!, map, rules);
+
+      // Always the direct line and the current heading.
+      expect(candidates.length).toBeGreaterThanOrEqual(2);
+      // One face per axis per wall at most, against four per wall in the naive
+      // search this replaced. A regression would blow well past this bound.
+      expect(candidates.length).toBeLessThanOrEqual(2 + 2 * map.walls.length);
+    }
+  });
+
+  it("keeps the face a bank shot actually bounces off", () => {
+    for (const map of [corridor, detour]) {
+      const engine = createJsEngine(map, rules);
+      engine.reset([0, 1], 1);
+      const [me, target] = engine.world.tanks;
+      const angle = findShot(engine.world, map, rules, me!, target!, 3);
+
+      expect(angle).toBeDefined();
+      expect(simulateShot(engine.world, map, rules, me!, angle!, 3)).toMatchObject({ slot: target!.slot });
+    }
   });
 });

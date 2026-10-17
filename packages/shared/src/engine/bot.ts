@@ -50,6 +50,9 @@ interface NavGrid {
   cols: number;
   rows: number;
   blocked: Uint8Array;
+  /** Reused across distance-field rebuilds so a re-plan does not allocate. */
+  field: Int32Array;
+  queue: Int32Array;
 }
 
 /** A steering decision: the input to apply now plus the heading the turn is aiming for. */
@@ -447,10 +450,68 @@ function firstShotHit(
 }
 
 /**
+ * Angles worth tracing for a shot at `target`: the direct line, the current
+ * heading, and one mirror image per wall face the shot could reflect off.
+ *
+ * Unfolding the bounce puts the reflection point where the line from the shooter
+ * to the mirrored target crosses the wall's plane. A face the line misses cannot
+ * be the first bounce, so it is dropped before tracing — the shot would either
+ * hit a neighbouring face (which has its own candidate) or sail past. Without
+ * that test the search traces one shot per face of every wall, four per wall, on
+ * every decision, which is what makes a bot match expensive.
+ */
+export function shotCandidates(shooter: Tank, target: Tank, map: GameMap, rules: GameRules): number[] {
+  const dx = target.x - shooter.x;
+  const dy = target.y - shooter.y;
+  const angles = [Math.atan2(dy, dx), shooter.angle];
+  // The bullet is a disc, so a face is still reachable from just off its span.
+  const margin = rules.bullet.radius + 1;
+
+  for (const wall of map.walls) {
+    if (shooter.x < wall.x) {
+      const span = 2 * wall.x - target.x - shooter.x;
+      const t = span !== 0 ? (wall.x - shooter.x) / span : 0;
+      const y = shooter.y + dy * t;
+      if (t > 0 && t <= 1 && y >= wall.y - margin && y <= wall.y + wall.height + margin) {
+        angles.push(Math.atan2(dy, span));
+      }
+    }
+    const right = wall.x + wall.width;
+    if (shooter.x > right) {
+      const span = 2 * right - target.x - shooter.x;
+      const t = span !== 0 ? (right - shooter.x) / span : 0;
+      const y = shooter.y + dy * t;
+      if (t > 0 && t <= 1 && y >= wall.y - margin && y <= wall.y + wall.height + margin) {
+        angles.push(Math.atan2(dy, span));
+      }
+    }
+    if (shooter.y < wall.y) {
+      const span = 2 * wall.y - target.y - shooter.y;
+      const t = span !== 0 ? (wall.y - shooter.y) / span : 0;
+      const x = shooter.x + dx * t;
+      if (t > 0 && t <= 1 && x >= wall.x - margin && x <= wall.x + wall.width + margin) {
+        angles.push(Math.atan2(span, dx));
+      }
+    }
+    const bottom = wall.y + wall.height;
+    if (shooter.y > bottom) {
+      const span = 2 * bottom - target.y - shooter.y;
+      const t = span !== 0 ? (bottom - shooter.y) / span : 0;
+      const x = shooter.x + dx * t;
+      if (t > 0 && t <= 1 && x >= wall.x - margin && x <= wall.x + wall.width + margin) {
+        angles.push(Math.atan2(span, dx));
+      }
+    }
+  }
+  return angles;
+}
+
+/**
  * Angle to fire at so the bullet reaches `target` (and not the shooter) with
  * at most `maxBounces` bounces, preferring fewer bounces, then less turning.
- * Candidates: the direct line, the current heading, one-bounce mirror images
- * of the target in every wall face, and a coarse sweep for longer ricochets.
+ * Candidates: the direct line, the current heading, one-bounce mirror images of
+ * the target in the wall faces the shot can actually reach, and a coarse sweep
+ * for longer ricochets.
  */
 export function findShot(
   world: Readonly<World>,
@@ -474,16 +535,7 @@ export function findShot(
       best = { angle, bounces: result.bounces, turn };
     }
   };
-  consider(shooter.angle);
-  for (const wall of map.walls) {
-    // Only faces turned toward the shooter can reflect a bullet back at the target.
-    if (shooter.x < wall.x) consider(Math.atan2(target.y - shooter.y, 2 * wall.x - target.x - shooter.x));
-    const right = wall.x + wall.width;
-    if (shooter.x > right) consider(Math.atan2(target.y - shooter.y, 2 * right - target.x - shooter.x));
-    if (shooter.y < wall.y) consider(Math.atan2(2 * wall.y - target.y - shooter.y, target.x - shooter.x));
-    const bottom = wall.y + wall.height;
-    if (shooter.y > bottom) consider(Math.atan2(2 * bottom - target.y - shooter.y, target.x - shooter.x));
-  }
+  for (const angle of shotCandidates(shooter, target, map, rules)) consider(angle);
   if (best === undefined && maxBounces > 1) {
     for (let sample = 0; sample < SHOT_SAMPLES; sample++) {
       consider(shooter.angle + (sample / SHOT_SAMPLES) * Math.PI * 2);
@@ -640,7 +692,15 @@ function navGrid(bot: BotState, map: GameMap, rules: GameRules): NavGrid {
       if (circleHitsWall(map, (col + 0.5) * cell, (row + 0.5) * cell, clearance)) blocked[row * cols + col] = 1;
     }
   }
-  bot.grid = { mapId: map.id, cell, cols, rows, blocked };
+  bot.grid = {
+    mapId: map.id,
+    cell,
+    cols,
+    rows,
+    blocked,
+    field: new Int32Array(cols * rows),
+    queue: new Int32Array(cols * rows),
+  };
   return bot.grid;
 }
 
@@ -677,9 +737,9 @@ function walkableNear(grid: NavGrid, index: number): number {
 
 /** Breadth-first distance from every cell to the goal (4-connected). */
 function distanceField(grid: NavGrid, goal: Point): Int32Array {
-  const field = new Int32Array(grid.cols * grid.rows).fill(-1);
+  const field = grid.field.fill(-1);
   const start = walkableNear(grid, cellOf(grid, goal));
-  const queue = new Int32Array(grid.cols * grid.rows);
+  const queue = grid.queue;
   let head = 0;
   let tail = 0;
   field[start] = 0;

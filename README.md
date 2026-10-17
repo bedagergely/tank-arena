@@ -48,6 +48,7 @@ bun run typecheck
 bun run lint
 bun run build       # apps/server/build/index.js, apps/client/dist/
 bun run --filter @tank-arena/server start
+bun run --filter @tank-arena/shared bench   # bot CPU benchmark
 ```
 
 ### Map editor (dev only)
