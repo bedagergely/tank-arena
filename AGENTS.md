@@ -115,4 +115,13 @@ there are no component tests.
    )"
    ```
 
-5. Do **not** push, force-push, or open a PR unless the user explicitly asks.
+5. **Push and rebuild the Docker image when finished** — this is the standing workflow, no need
+   to be asked:
+
+   ```sh
+   git push
+   docker compose build
+   ```
+
+   Push the current branch with `git push`. Never force-push, and don't open a PR unless asked.
+   Then rebuild `tank-arena:latest` so the image reflects the new code.
