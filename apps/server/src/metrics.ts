@@ -1,5 +1,6 @@
 import { cpus } from "node:os";
 import { performance } from "node:perf_hooks";
+import { gameStats, type GameSample, type GameStats } from "./gameStats.ts";
 
 /** Percent of a single core, so a multi-threaded burst can exceed 100. */
 export interface CpuSample {
@@ -26,6 +27,7 @@ export interface MetricsSnapshot {
   cores: number;
   cpu: Channel<CpuSample>;
   memory: Channel<MemorySample>;
+  game: Channel<GameSample>;
 }
 
 export interface Recorder<T> {
@@ -39,6 +41,7 @@ export interface Recorder<T> {
 export interface Metrics {
   readonly cpu: Recorder<CpuSample>;
   readonly memory: Recorder<MemorySample>;
+  readonly game: Recorder<GameSample>;
   snapshot(): MetricsSnapshot;
 }
 
@@ -47,6 +50,8 @@ export interface MetricsOptions {
   intervalMs?: number;
   /** How many samples the gauge can look back over. */
   historyLimit?: number;
+  /** Game counters to aggregate. Defaults to the process-wide instance the rooms feed. */
+  stats?: GameStats;
 }
 
 const DEFAULT_INTERVAL_MS = 1000;
@@ -136,9 +141,13 @@ function createMemorySampler(): (at: number) => MemorySample {
 export function createMetrics(options: MetricsOptions = {}): Metrics {
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const historyLimit = options.historyLimit ?? DEFAULT_HISTORY_LIMIT;
+  const stats = options.stats ?? gameStats;
 
   const cpu = createRecorder(createCpuSampler, intervalMs, historyLimit);
   const memory = createRecorder(createMemorySampler, intervalMs, historyLimit);
+  // Unlike CPU/memory, this one does not sample the process: the rooms have
+  // already recorded their ticks and events, so sampling just aggregates.
+  const game = createRecorder(() => (at: number) => stats.sample(at), intervalMs, historyLimit);
 
   const channel = <T>(recorder: Recorder<T>): Channel<T> => ({
     recording: recorder.recording,
@@ -149,6 +158,12 @@ export function createMetrics(options: MetricsOptions = {}): Metrics {
   return {
     cpu,
     memory,
-    snapshot: () => ({ cores: cpus().length, cpu: channel(cpu), memory: channel(memory) }),
+    game,
+    snapshot: () => ({
+      cores: cpus().length,
+      cpu: channel(cpu),
+      memory: channel(memory),
+      game: channel(game),
+    }),
   };
 }

@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks";
 import { Room, type Client, type StepContext } from "colyseus";
 import {
   clampRounds,
@@ -31,6 +32,8 @@ import {
   type TickEvent,
 } from "@tank-arena/shared";
 import { BulletState, GameState, LootState, PlayerState, TankState } from "./schema/GameState.ts";
+import { gameStats, type GameEventKind } from "../gameStats.ts";
+import { roomLog } from "../logger.ts";
 import { RateLimiter } from "../util/RateLimiter.ts";
 
 /**
@@ -57,6 +60,17 @@ interface ClientData {
 type GameClient = Client<{ messages: ServerMessages; userData: ClientData }>;
 
 const BOT_NAMES = ["Rusty", "Bolt", "Sprocket", "Gizmo", "Clank", "Piston", "Widget", "Turbo"];
+
+/** Which metric counter each simulation event feeds; `bullet-expired` is not counted. */
+const EVENT_KINDS: Record<TickEvent["type"], GameEventKind | undefined> = {
+  fire: "fire",
+  bounce: "bounce",
+  hit: "hit",
+  "shield-block": "hit",
+  "loot-spawn": "loot",
+  "loot-pickup": "loot",
+  "bullet-expired": undefined,
+};
 
 /**
  * One match lobby + arena. The room owns all game truth: clients only send
@@ -149,6 +163,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       this.state.players.set(id, new PlayerState({ sessionId: id, name, slot, ready: true, isBot: true, difficulty }));
       this.bots.set(id, createBot(slot, difficulty, newSeed()));
       this.updateMaxClients();
+      gameStats.seatTaken();
+      roomLog(this.roomId, `bot ${id} joined "${name}" slot=${slot} difficulty=${difficulty}`);
       this.system(`${name} joined (${difficulty}).`);
       this.tryAutoStart();
     },
@@ -162,6 +178,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
       this.bots.delete(id);
       this.state.players.delete(id);
       this.updateMaxClients();
+      gameStats.seatFreed();
+      roomLog(this.roomId, `bot ${id} removed "${player.name}"`);
       this.system(`${player.name} removed.`);
     },
   };
@@ -183,6 +201,14 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
 
     void this.setMetadata({ mapId, phase: "lobby" });
     this.setFixedTimestep((ctx) => this.step(ctx), this.rules.tickRate);
+
+    gameStats.roomOpened();
+    roomLog(this.roomId, `created map=${mapId} maxPlayers=${this.rules.maxPlayers}`);
+  }
+
+  override onDispose() {
+    gameStats.roomClosed();
+    roomLog(this.roomId, "disposed");
   }
 
   override onJoin(client: GameClient, options: JoinOptions) {
@@ -198,7 +224,9 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     if (!this.state.hostSessionId) {
       this.state.hostSessionId = client.sessionId;
     }
+    if (player.slot >= 0) gameStats.seatTaken();
 
+    roomLog(this.roomId, `join ${client.sessionId} "${name}" slot=${player.slot}`);
     this.system(`${name} joined.`);
   }
 
@@ -206,6 +234,8 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
     this.state.players.delete(client.sessionId);
+    if (player.slot >= 0) gameStats.seatFreed();
+    roomLog(this.roomId, `leave ${client.sessionId} "${player.name}"`);
     this.system(`${player.name} left.`);
 
     if (this.state.hostSessionId === client.sessionId) {
@@ -259,6 +289,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     this.lastCountdownShown = -1;
     this.state.countdown = Math.ceil(seconds);
     void this.setMetadata({ ...this.metadata, phase });
+    roomLog(this.roomId, `phase ${phase}`);
   }
 
   private tryAutoStart() {
@@ -316,6 +347,7 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
   }
 
   private simulate(dt: number) {
+    const started = performance.now();
     // Bots decide from the same authoritative world the clients see, one input per tick.
     for (const bot of this.bots.values()) {
       this.engine.setInput(bot.slot, thinkBot(bot, this.engine.world, this.engine.map, this.rules, dt));
@@ -323,11 +355,14 @@ export class GameRoom extends Room<{ state: GameState; client: GameClient }> {
     const events = this.engine.step(dt);
     this.syncWorld();
     this.handleEvents(events);
+    gameStats.recordTick(performance.now() - started);
   }
 
   private handleEvents(events: TickEvent[]) {
     let hit = false;
     for (const e of events) {
+      const kind = EVENT_KINDS[e.type];
+      if (kind) gameStats.recordEvent(kind);
       switch (e.type) {
         case "fire":
           this.broadcast("event", { type: "fire", slot: e.slot });

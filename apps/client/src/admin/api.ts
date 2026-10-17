@@ -13,7 +13,14 @@ export interface AdminStatus {
 const BASE = "/admin";
 
 async function request<T>(path: string, method: "GET" | "POST" = "GET"): Promise<T> {
-  const res = await fetch(BASE + path, { method });
+  // POSTs must carry a body. The server's Bun WebSocket transport wraps express,
+  // and its body reader throws on a request whose body is absent, so a bare
+  // `{ method: "POST" }` fails with a 500 before the route is reached.
+  const init: RequestInit =
+    method === "POST"
+      ? { method, headers: { "content-type": "application/json" }, body: "{}" }
+      : { method };
+  const res = await fetch(BASE + path, init);
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(body.error ?? res.statusText);
   return body as T;
@@ -37,3 +44,6 @@ export const stopCpuRecording = () => request("/metrics/cpu/stop", "POST");
 
 export const startMemoryRecording = () => request("/metrics/memory/start", "POST");
 export const stopMemoryRecording = () => request("/metrics/memory/stop", "POST");
+
+export const startGameRecording = () => request("/metrics/game/start", "POST");
+export const stopGameRecording = () => request("/metrics/game/stop", "POST");

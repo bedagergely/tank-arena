@@ -6,6 +6,7 @@ import express from "express";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { adminMiddleware, resolveAdminConfig, type AdminOptions } from "../src/admin.ts";
+import type { GameSample } from "../src/gameStats.ts";
 import type { CpuSample, MemorySample, Metrics } from "../src/metrics.ts";
 import { createProfiler, type Profiler, type SnapshotInfo } from "../src/profiler.ts";
 
@@ -49,8 +50,17 @@ function fakeProfiler(): Profiler {
 function fakeMetrics(): Metrics {
   let cpu = false;
   let memory = false;
+  let game = false;
   const cpuSample: CpuSample = { at: 1, usage: 42 };
   const memorySample: MemorySample = { at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 };
+  const gameSample: GameSample = {
+    at: 1,
+    rooms: 2,
+    players: 3,
+    tickP50: 1,
+    tickP95: 2,
+    eventsPerSecond: { fire: 4, bounce: 0, hit: 1, loot: 0 },
+  };
 
   return {
     cpu: {
@@ -87,10 +97,28 @@ function fakeMetrics(): Metrics {
         memory = false;
       },
     },
+    game: {
+      get recording() {
+        return game;
+      },
+      get latest() {
+        return game ? gameSample : null;
+      },
+      get history() {
+        return game ? [gameSample] : [];
+      },
+      start() {
+        game = true;
+      },
+      stop() {
+        game = false;
+      },
+    },
     snapshot: () => ({
       cores: 4,
       cpu: { recording: cpu, latest: cpu ? cpuSample : null, history: cpu ? [cpuSample] : [] },
       memory: { recording: memory, latest: memory ? memorySample : null, history: memory ? [memorySample] : [] },
+      game: { recording: game, latest: game ? gameSample : null, history: game ? [gameSample] : [] },
     }),
   };
 }
@@ -235,7 +263,7 @@ describe("admin panel", () => {
     expect((await fetch(`${base}/admin/metrics/cpu/start`, { method: "POST" })).status).toBe(401);
   });
 
-  it("records CPU and memory usage on demand", async () => {
+  it("records CPU, memory and game usage on demand", async () => {
     const base = await listen({ env: PROD, profiler: fakeProfiler(), metrics: fakeMetrics() });
 
     const idle = await fetch(`${base}/admin/metrics`, { headers: auth });
@@ -243,13 +271,24 @@ describe("admin panel", () => {
       cores: 4,
       cpu: { recording: false, latest: null, history: [] },
       memory: { recording: false, latest: null, history: [] },
+      game: { recording: false, latest: null, history: [] },
     });
 
     const startCpu = await fetch(`${base}/admin/metrics/cpu/start`, { method: "POST", headers: auth });
     expect(await startCpu.json()).toEqual({ recording: true });
     const startMemory = await fetch(`${base}/admin/metrics/memory/start`, { method: "POST", headers: auth });
     expect(await startMemory.json()).toEqual({ recording: true });
+    const startGame = await fetch(`${base}/admin/metrics/game/start`, { method: "POST", headers: auth });
+    expect(await startGame.json()).toEqual({ recording: true });
 
+    const gameSample = {
+      at: 1,
+      rooms: 2,
+      players: 3,
+      tickP50: 1,
+      tickP95: 2,
+      eventsPerSecond: { fire: 4, bounce: 0, hit: 1, loot: 0 },
+    };
     const running = await fetch(`${base}/admin/metrics`, { headers: auth });
     expect(await running.json()).toEqual({
       cores: 4,
@@ -259,15 +298,34 @@ describe("admin panel", () => {
         latest: { at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 },
         history: [{ at: 1, rss: 100, heapUsed: 40, heapTotal: 60, external: 10 }],
       },
+      game: { recording: true, latest: gameSample, history: [gameSample] },
     });
 
     const stopCpu = await fetch(`${base}/admin/metrics/cpu/stop`, { method: "POST", headers: auth });
     expect(await stopCpu.json()).toEqual({ recording: false });
     const stopMemory = await fetch(`${base}/admin/metrics/memory/stop`, { method: "POST", headers: auth });
     expect(await stopMemory.json()).toEqual({ recording: false });
+    const stopGame = await fetch(`${base}/admin/metrics/game/stop`, { method: "POST", headers: auth });
+    expect(await stopGame.json()).toEqual({ recording: false });
 
     const stopped = await fetch(`${base}/admin/metrics`, { headers: auth });
-    expect(await stopped.json()).toMatchObject({ cpu: { recording: false }, memory: { recording: false } });
+    expect(await stopped.json()).toMatchObject({
+      cpu: { recording: false },
+      memory: { recording: false },
+      game: { recording: false },
+    });
+  });
+
+  it("exposes the game channel on the metrics endpoint", async () => {
+    const base = await listen({ env: PROD, profiler: fakeProfiler(), metrics: fakeMetrics() });
+
+    await fetch(`${base}/admin/metrics/game/start`, { method: "POST", headers: auth });
+    const res = await fetch(`${base}/admin/metrics`, { headers: auth });
+    const body = (await res.json()) as { game: { latest: { rooms: number; players: number } | null } };
+
+    expect(body.game.latest).not.toBeNull();
+    expect(body.game.latest!.rooms).toBe(2);
+    expect(body.game.latest!.players).toBe(3);
   });
 });
 
