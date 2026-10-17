@@ -4,9 +4,9 @@ One file per proposed improvement, written to be handed to a coding agent on its
 own — each contains the problem, the evidence, the proposed change, and an
 acceptance test that should fail before the fix and pass after it.
 
-Produced from a full read-through of the repo. Baseline at the time of writing
-was green: `bun run typecheck`, `bun run lint`, `bun run test` (35 shared + 58
-server + 12 client tests).
+Produced from a full read-through of the repo, then reviewed item by item. Baseline
+at the time of writing was green: `bun run typecheck`, `bun run lint`, `bun run test`
+(35 shared + 58 server + 12 client tests).
 
 | # | Title | Category | Priority |
 | --- | --- | --- | --- |
@@ -15,9 +15,8 @@ server + 12 client tests).
 | [03](03-vacuous-minplayers-test.md) | `GameRoom.test.ts` has a test that asserts nothing | Tests | High |
 | [04](04-no-reconnection-dead-connected-field.md) | Disconnects are permanent; `connected` is dead state | Bug | High |
 | [05](05-inputs-never-expire.md) | A silent client keeps driving forever | Gameplay | Medium |
-| [06](06-final-bounce-cannot-hit.md) | A bullet cannot hit on the tick it reaches `maxBounces` | Bug | Medium |
 | [07](07-map-clearance-not-validated.md) | Map clearance is never checked on the real compile path | Bug | Medium |
-| [08](08-floating-promise-setmetadata.md) | `void this.setMetadata(...)` can become an unhandled rejection | Robustness | Medium |
+| [08](08-restart-container-on-exit.md) | Restart the container when the Bun process exits | Robustness | Medium |
 | [09](09-ratelimiter-untested.md) | `RateLimiter` has zero tests | Tests | Medium |
 | [10](10-unbounded-room-creation.md) | Nothing caps room creation or joins | Security | Medium |
 | [11](11-nginx-security-headers.md) | Nginx ships no security headers | Security | Low |
@@ -28,6 +27,24 @@ server + 12 client tests).
 | [16](16-ui-polish-mute-reduced-motion-a11y.md) | Missing polish: mute, reduced motion, colour-only scoreboard | UI | Low |
 | [17](17-editor-model-untested.md) | `editorModel.ts` is pure and untested | Tests | Medium |
 | [18](18-physics-invariant-fuzz-test.md) | Physics invariant fuzz test | Tests | Low |
+
+Numbers are stable handoff ids; gaps are intentional.
+
+## Dropped
+
+- **06 — A bullet cannot hit on the tick it reaches `maxBounces`.** The
+  `stepBullets` ordering is deliberate: the simulation is authoritative and the bot
+  must match it, not the other way round. The behavioural detail is now captured as
+  a requirement inside [01](01-bot-shot-planner-desync.md).
+
+## Reworked after review
+
+- **01** — the fix must keep the planner **analytic and fast**, not fall back to a
+  per-tick stepper replay. The file now spells out the exact `moveCircle` semantics
+  the model has to reproduce and gates it on a differential equivalence test.
+- **08** — the original finding (`void this.setMetadata(...)`) is explicitly kept
+  as-is. The file is now about supervising the process so the container restarts if
+  Bun exits.
 
 ## How to use these
 

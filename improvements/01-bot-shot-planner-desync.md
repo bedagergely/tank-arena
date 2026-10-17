@@ -4,7 +4,7 @@
 | --- | --- |
 | Category | Bug (gameplay AI correctness) |
 | Priority | High |
-| Component | `packages/shared` — `src/engine/bot.ts`, `src/engine/simulation.ts` |
+| Component | `packages/shared` — `src/engine/bot.ts`, `src/engine/physics.ts` |
 | Verified | Yes, reproduced with an angle sweep (numbers below) |
 
 ## Problem
@@ -16,10 +16,19 @@ rounded-corner Minkowski model for wall corners, and a `SHOT_NUDGE` off each
 surface.
 
 The real bullet is moved by `moveCircle()` in
-`packages/shared/src/engine/physics.ts`, which advances in sub-steps and resolves
-**each axis independently** (`if (!hitX && sx !== 0) …; if (!hitY && sy !== 0) …`),
-reflecting on tick boundaries. These are different collision models and they
-diverge near corners, tangents and simultaneous wall contacts.
+`packages/shared/src/engine/physics.ts`, whose semantics are quite specific:
+
+- the move is split into `steps = ceil(max(|dx|, |dy|) / (2 * radius))` sub-steps,
+- each sub-step resolves **X first, then Y**, testing each axis independently
+  against `circleHitsWall`,
+- once an axis is blocked it is **latched**: `hitX`/`hitY` stay true and that axis
+  stops advancing for the rest of the *call* (the loop also breaks early when both
+  are blocked),
+- `circleHitsWall` is a circle-vs-AABB test via `clamp` (i.e. the wall grown by the
+  radius with rounded corners), plus a map-bounds check.
+
+The analytic model does not reproduce the sub-step quantization or the per-axis
+latching, so the two disagree near corners, tangents and simultaneous contacts.
 
 Consequence: the bot picks angles it believes will hit the enemy, and the bullet
 misses — or worse, hits the shooter itself.
@@ -62,40 +71,62 @@ function liveHit(map: GameMap, angle: number): number | undefined {
 
 ## Proposed change
 
-Make the planner use the **same** collision model as the simulation:
+**Keep the planner analytic and fast, but make the analytic model agree with the
+step-based simulation.** Do not simply replace `simulateShot` with a stepper loop,
+and do not change the simulation — the simulation is the source of truth and the
+bot must match it as it is.
 
-- Reimplement `simulateShot()` by stepping the bullet with `moveCircle()` at
-  `dt = 1 / rules.tickRate`, exactly as `predictImpact()` already does for dodging,
-  instead of the analytic ray casts. Stop when the bullet exceeds its bounce
-  budget, leaves the time budget, or hits a tank.
-- Alternatively (less invasive but slower): keep the analytic candidate search in
-  `findShot()`, but verify the chosen angle by replaying it through the stepper
-  before returning it.
-- Keep `findShot()`'s candidate generation (direct line, mirror images, coarse
-  sweep) unchanged; only the prediction function needs to agree with the sim.
+Concretely, the replacement model must reproduce, at minimum:
 
-Do not change `stepBullets()`/`moveCircle()` semantics to match the planner — the
-simulation is the source of truth.
+1. The sub-step quantization: a leg's displacement is divided into
+   `ceil(max(|dx|, |dy|) / (2 * radius))` equal sub-steps, so the achievable path
+   depends on the total leg length, not just its direction.
+2. Per-axis latching: within a single `moveCircle` call, a blocked axis freezes for
+   the remainder of that call while the other axis keeps advancing (using the
+   current value of the frozen axis). Reflection happens once per call, per axis,
+   at the moment the axis latches.
+3. The same collision primitive as `circleHitsWall` (wall grown by the radius with
+   rounded corners + map bounds), not a sharp grown box.
+4. The simulation's event ordering: `stepBullets` destroys a bullet on the tick it
+   reaches `maxBounces` **before** the tank collision test, so a hit on that tick
+   does not happen. The planner must reproduce that ordering rather than "improve"
+   on it.
+
+`findShot()`'s candidate generation (direct line, mirror images, coarse sweep) and
+the performance characteristics of the search should stay as they are; only the
+prediction function needs to agree with the sim.
+
+An exact closed form may not be attainable; that is acceptable. The gate is the
+differential test below — **any** analytic implementation that passes it is
+acceptable, whether that means deriving the latched geometry exactly or adding a
+cheap reconciliation step that keeps the search analytic.
 
 ## Acceptance test (write this first)
 
-In `packages/shared/test/bot.test.ts`, add:
+Two layers, both in `packages/shared/test/`:
 
-> **"the shot planner agrees with the live simulation"** — sweep ~720 angles on
-> `corridor` and `detour`; for every angle where
-> `simulateShot(world, map, rules, shooter, angle, rules.bullet.maxBounces)` returns
-> a hit on the target, fire that angle in a live engine and assert the sim reports
-> a `hit` on the target slot and **never** on the shooter.
-
-This fails today (10 mismatches on `corridor`, 4 on `detour`).
+1. **Differential equivalence (the real gate).** Add a seeded randomized test that,
+   for a large corpus of `(map, start, displacement)` cases, runs the new analytic
+   model and `moveCircle`/`stepBullets` and asserts they agree on the outcome:
+   final position (within a tight epsilon), `hitX`/`hitY`, bounce count, and — for
+   shot simulation — which tank (if any) is hit and with how many bounces.
+   Include the corner/tangent cases that currently diverge.
+2. **Planner vs live engine.** Sweep ~720 angles on `corridor` and `detour`; for
+   every angle where the planner reports a hit on the target, fire it in a live
+   engine and assert the sim reports a `hit` on the target slot and **never** on the
+   shooter. This fails today (10 + 4 mismatches).
 
 ## Files likely touched
 
-- `packages/shared/src/engine/bot.ts` (`simulateShot`, possibly `castShotRay`/`rayShotBox` removed)
-- `packages/shared/test/bot.test.ts`
+- `packages/shared/src/engine/bot.ts` (`simulateShot`, `castShotRay`, `rayShotBox`)
+- `packages/shared/src/engine/physics.ts` (only if a shared primitive is extracted)
+- `packages/shared/test/bot.test.ts`, `packages/shared/test/simulation.test.ts`
 
 ## Definition of done
 
-- New test passes; existing `bot.test.ts` and `simulation.test.ts` still pass.
+- The differential test passes with a tight tolerance; the planner-vs-engine sweep
+  reports zero mismatches on both maps.
+- Existing `bot.test.ts` and `simulation.test.ts` still pass; the planner stays
+  analytic (no per-tick stepper replay in the hot path).
 - `bun run typecheck && bun run lint && bun run test` is green.
 - No behavioural change to `stepWorld`/`moveCircle`.
