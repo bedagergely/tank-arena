@@ -39,6 +39,7 @@ these supply-chain guards; if a dependency fails to install, escalate instead of
 | `bun run lint`   | ESLint over the whole repo                                          |
 | `bun run build`  | `apps/server/build/index.js` and `apps/client/dist/`                |
 | `bun run --filter @tank-arena/server start` | Run the built server                    |
+| `bun run --filter @tank-arena/shared bench` | Bot CPU benchmark (shot-planner cost) |
 
 `bun test` and `bun build` are Bun built-ins that shadow scripts of the same name, so
 always invoke those two as `bun run test` / `bun run build`.

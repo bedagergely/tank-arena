@@ -27,8 +27,13 @@ at the time of writing was green: `bun run typecheck`, `bun run lint`, `bun run 
 | [16](16-ui-polish-mute-reduced-motion-a11y.md) | Missing polish: mute, reduced motion, colour-only scoreboard | UI | Low |
 | [17](17-editor-model-untested.md) | `editorModel.ts` is pure and untested | Tests | Medium |
 | [18](18-physics-invariant-fuzz-test.md) | Physics invariant fuzz test | Tests | Low |
+| [19](19-wall-spatial-index.md) | Spatial index for wall lookups | Performance | Medium |
 
 Numbers are stable handoff ids; gaps are intentional.
+
+**19** came out of profiling a live bot match rather than the initial read-through:
+after the shot-planner candidate pruning in `devin/bot-planner-perf`, wall lookups
+are the largest remaining cost.
 
 ## Dropped
 
