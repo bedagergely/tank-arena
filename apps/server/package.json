@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@colyseus/bun-websockets": "0.18.2",
     "@colyseus/schema": "^5.0.20",
     "@colyseus/tools": "^0.18.2",
     "@jridgewell/trace-mapping": "^0.3.31",

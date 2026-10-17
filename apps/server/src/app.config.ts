@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineServer, defineRoom, LobbyRoom } from "colyseus";
+import { BunWebSockets } from "@colyseus/bun-websockets";
 import express from "express";
 import { listMaps } from "@tank-arena/shared";
 import { gameRoom } from "./rooms/GameRoom.ts";
@@ -17,6 +18,10 @@ const server = defineServer({
     [GAME_ROOM]: defineRoom(gameRoom({ rules: { maxPlayers: 4, minPlayers: 1 } })).enableRealtimeListing(),
     lobby: defineRoom(LobbyRoom),
   },
+
+  // Bun-native WebSocket transport (Bun.serve), instead of the default
+  // @colyseus/ws-transport, which runs on Node's http server.
+  transport: new BunWebSockets(),
 
   express: (app) => {
     app.get("/api/maps", (_req, res) => {

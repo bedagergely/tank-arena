@@ -76,6 +76,11 @@ there are no component tests.
   Bun's `node:inspector` implements the CPU `Profiler` domain but not `HeapProfiler`: CPU profiles
   go through the inspector and heap snapshots through `Bun.generateHeapSnapshot("v8")`
   (`apps/server/src/profiler.ts`). Sampling heap profiles have no Bun equivalent.
+- The server's WebSocket transport is `@colyseus/bun-websockets` (Bun.serve), passed to
+  `defineServer` in `apps/server/src/app.config.ts` — not the default `@colyseus/ws-transport`.
+  It is pinned to `0.18.2`: `0.18.3` requires `@colyseus/core >= 0.18.16` and would install a
+  second copy of core, which breaks the shared matchmaker. Bump it with the rest of the Colyseus
+  stack, and keep the core version satisfying `^0.18.8`.
 - New maps are `MapSource` modules in `packages/shared/src/maps/data/` with the generated
   `data/index.ts` registry. The dev map editor (`?editor`) writes them into source via the Bun dev
   server only (`apps/client/dev/serve.ts`) — commit the generated files.
